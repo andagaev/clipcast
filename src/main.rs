@@ -1,6 +1,7 @@
 mod clip;
 mod duration;
 mod paths;
+mod preflight;
 mod process;
 mod sidecar;
 
@@ -28,6 +29,9 @@ fn main() {
         program: String::new(),
     };
     let _ = process::run::<[&str; 0], &str, [(&str, &str); 0], &str, &str>;
+    let _ = preflight::check_binaries;
+    let _ = preflight::check_input_dir;
+    let _ = preflight::REQUIRED_BINARIES;
     let _ = |c: clip::Clip| {
         let clip::Clip { path, meta } = c;
         let clip::ClipMeta {
