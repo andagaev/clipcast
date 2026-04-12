@@ -1,16 +1,17 @@
-//! Concatenate the kept clips into a single output video using `ffmpeg`.
+//! Concatenate the kept clips into a single output video+audio using `ffmpeg`.
 //!
 //! Input clips from Meta Ray-Ban glasses (and most phones) are portrait
 //! but often mixed resolutions across a single shoot. The concat filter
 //! handles this by scaling + padding every clip to a common target
-//! (1080x1920) before concatenation. v1 output is video-only.
+//! (1080x1920) before concatenation. Audio is resampled to a common
+//! 48kHz stereo AAC stream.
 //!
 //! Steps:
 //! 1. Filter to kept clips with `keep = true`.
 //! 2. Verify each is portrait (height > width). Landscape clips error out.
 //! 3. Sort kept clips by timestamp ascending.
 //! 4. Build an ffmpeg `-filter_complex` graph that scales + pads each
-//!    clip to 1080x1920 and concatenates the results.
+//!    clip's video to 1080x1920, normalizes audio, and concatenates.
 
 use crate::clip::ClipVerdict;
 use crate::process::{self, ProcessError};
@@ -100,12 +101,18 @@ fn build_ffmpeg_args(kept: &[&ClipVerdict], output_path: &Path) -> Vec<String> {
 
     args.push("-map".to_string());
     args.push("[outv]".to_string());
+    args.push("-map".to_string());
+    args.push("[outa]".to_string());
     args.push("-c:v".to_string());
     args.push("libx264".to_string());
     args.push("-preset".to_string());
     args.push("medium".to_string());
     args.push("-crf".to_string());
     args.push("23".to_string());
+    args.push("-c:a".to_string());
+    args.push("aac".to_string());
+    args.push("-b:a".to_string());
+    args.push("192k".to_string());
     args.push("-movflags".to_string());
     args.push("+faststart".to_string());
     args.push(output_path.to_string_lossy().into_owned());
@@ -120,11 +127,14 @@ fn build_filter_graph(n: usize) -> String {
             "[{i}:v]scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=decrease,\
              pad={TARGET_W}:{TARGET_H}:(ow-iw)/2:(oh-ih)/2,setsar=1[v{i}];"
         ));
+        filter.push_str(&format!(
+            "[{i}:a]aresample=48000,aformat=channel_layouts=stereo[a{i}];"
+        ));
     }
     for i in 0..n {
-        filter.push_str(&format!("[v{i}]"));
+        filter.push_str(&format!("[v{i}][a{i}]"));
     }
-    filter.push_str(&format!("concat=n={n}:v=1:a=0[outv]"));
+    filter.push_str(&format!("concat=n={n}:v=1:a=1[outv][outa]"));
     filter
 }
 
@@ -175,7 +185,8 @@ mod tests {
         assert!(graph.contains("[0:v]scale=1080:1920"));
         assert!(graph.contains("[1:v]scale=1080:1920"));
         assert!(graph.contains("[2:v]scale=1080:1920"));
-        assert!(graph.contains("[v0][v1][v2]concat=n=3:v=1:a=0[outv]"));
+        assert!(graph.contains("[0:a]aresample=48000"));
+        assert!(graph.contains("[v0][a0][v1][a1][v2][a2]concat=n=3:v=1:a=1[outv][outa]"));
     }
 
     #[test]
