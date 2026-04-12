@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Fake ffprobe for integration tests.
+# Emits canned JSON describing a 10-second 1080x1920 clip with a creation_time.
+cat <<'EOF'
+{
+  "format": {
+    "duration": "10.000000",
+    "tags": {
+      "creation_time": "2026-04-12T14:23:45.000000Z"
+    }
+  },
+  "streams": [
+    {
+      "codec_type": "video",
+      "width": 1080,
+      "height": 1920
+    }
+  ]
+}
+EOF

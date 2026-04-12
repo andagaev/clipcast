@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Fake ffmpeg for integration tests.
+# Two modes:
+# 1. Frame extraction: -frames:v 1 → writes a tiny fake JPEG to the output path
+# 2. Concat: -f concat → writes a 10-byte fake MP4 to the output path
+
+out="${!#}"
+
+if [[ " $* " == *" -f concat "* ]]; then
+    printf 'fake-mp4\n' > "$out"
+    exit 0
+fi
+
+if [[ " $* " == *" -frames:v 1 "* ]]; then
+    printf '\xff\xd8\xff\xe0fakejpeg\xff\xd9' > "$out"
+    exit 0
+fi
+
+echo "fake ffmpeg: unexpected args: $*" >&2
+exit 1

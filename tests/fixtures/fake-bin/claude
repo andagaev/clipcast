@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Fake claude -p for integration tests.
+# Reads prompt from stdin (discards), writes canned JSON verdict to stdout.
+# Asserts AGENT_COLLECTOR_IGNORE=1 is set in the env — this is the
+# load-bearing check that proves the hook isolation propagates.
+
+if [ "${AGENT_COLLECTOR_IGNORE:-}" != "1" ]; then
+    echo "FAIL: AGENT_COLLECTOR_IGNORE not set in claude env" >&2
+    exit 1
+fi
+
+cat >/dev/null
+printf '{"score": 7, "reason": "fake verdict from mock claude"}\n'
