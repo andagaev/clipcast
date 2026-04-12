@@ -15,11 +15,10 @@
 //! we add a second backend that needs dynamic dispatch, switch to
 //! `async-trait`.
 
-#![allow(async_fn_in_trait)]
-
 use crate::clip::{Clip, ClipVerdict};
 use crate::pipeline::frames::FramesError;
 use crate::process::ProcessError;
+use std::future::Future;
 use std::path::Path;
 
 pub(crate) mod claude_print;
@@ -47,5 +46,9 @@ pub(crate) enum AnalyzerError {
 /// or an error. The orchestrator in `pipeline::analyze` converts
 /// errors into `ClipVerdict { error: Some(...), ... }` entries.
 pub(crate) trait ClipAnalyzer {
-    async fn analyze(&self, clip: &Clip, frames: &[&Path]) -> Result<ClipVerdict, AnalyzerError>;
+    fn analyze(
+        &self,
+        clip: &Clip,
+        frames: &[&Path],
+    ) -> impl Future<Output = Result<ClipVerdict, AnalyzerError>> + Send;
 }
