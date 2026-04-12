@@ -1,8 +1,11 @@
 mod clip;
 mod duration;
+mod paths;
 
 fn main() {
     let _ = duration::parse;
+    let _ = paths::default_output;
+    let _ = paths::sidecar_for;
     let _ = |c: clip::Clip| {
         let clip::Clip { path, meta } = c;
         let clip::ClipMeta {
