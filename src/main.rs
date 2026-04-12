@@ -1,6 +1,7 @@
 mod clip;
 mod duration;
 mod paths;
+mod pipeline;
 mod preflight;
 mod process;
 mod sidecar;
@@ -32,6 +33,7 @@ fn main() {
     let _ = preflight::check_binaries;
     let _ = preflight::check_input_dir;
     let _ = preflight::REQUIRED_BINARIES;
+    let _ = pipeline::discover::run;
     let _ = |c: clip::Clip| {
         let clip::Clip { path, meta } = c;
         let clip::ClipMeta {
