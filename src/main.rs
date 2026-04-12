@@ -1,11 +1,24 @@
 mod clip;
 mod duration;
 mod paths;
+mod sidecar;
 
 fn main() {
     let _ = duration::parse;
     let _ = paths::default_output;
     let _ = paths::sidecar_for;
+    let _ = sidecar::read;
+    let _ = sidecar::write;
+    let _ = sidecar::build;
+    let _ = |s: sidecar::Sidecar| {
+        let sidecar::Sidecar {
+            clipcast_version,
+            generated_at,
+            target_duration_s,
+            clips,
+        } = s;
+        (clipcast_version, generated_at, target_duration_s, clips)
+    };
     let _ = |c: clip::Clip| {
         let clip::Clip { path, meta } = c;
         let clip::ClipMeta {
