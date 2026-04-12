@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # Fake ffmpeg for integration tests.
-# Two modes:
+# Three modes:
 # 1. Frame extraction: -frames:v 1 → writes a tiny fake JPEG to the output path
-# 2. Concat: -f concat → writes a 10-byte fake MP4 to the output path
+# 2. Legacy concat demuxer: -f concat → writes a fake MP4 to the output path
+# 3. Concat filter graph: -filter_complex → writes a fake MP4 to the output path
 
 out="${!#}"
+
+if [[ " $* " == *" -filter_complex "* ]]; then
+    printf 'fake-mp4\n' > "$out"
+    exit 0
+fi
 
 if [[ " $* " == *" -f concat "* ]]; then
     printf 'fake-mp4\n' > "$out"

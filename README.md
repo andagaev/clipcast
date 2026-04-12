@@ -52,4 +52,4 @@ All artifacts live in the input directory:
 
 ### Scope
 
-v1 supports only 9:16 (portrait) clips. Non-9:16 sources error with an actionable message. No transitions, titles, music, or narration in v1 — hard cuts only.
+v1 supports any portrait (height > width) `.mp4` or `.mov` clip. Mixed resolutions are scale-padded to 1080×1920 during concat. Landscape sources error with an actionable message. No transitions, titles, music, or narration in v1 — hard cuts only, video-only output.

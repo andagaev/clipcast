@@ -1,17 +1,25 @@
 //! Concatenate the kept clips into a single output video using `ffmpeg`.
 //!
+//! Input clips from Meta Ray-Ban glasses (and most phones) are portrait
+//! but often mixed resolutions across a single shoot. The concat filter
+//! handles this by scaling + padding every clip to a common target
+//! (1080x1920) before concatenation. v1 output is video-only.
+//!
 //! Steps:
 //! 1. Filter to kept clips with `keep = true`.
-//! 2. Verify each is 9:16 (portrait). Error on mismatch.
+//! 2. Verify each is portrait (height > width). Landscape clips error out.
 //! 3. Sort kept clips by timestamp ascending.
-//! 4. Write a concat manifest file (one `file '<abs path>'` line per clip).
-//! 5. Run `ffmpeg -f concat -safe 0 -i <manifest> -c copy <output>` first.
-//!    If that fails, retry with a full re-encode.
+//! 4. Build an ffmpeg `-filter_complex` graph that scales + pads each
+//!    clip to 1080x1920 and concatenates the results.
 
 use crate::clip::ClipVerdict;
 use crate::process::{self, ProcessError};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+
+/// Target resolution for all clips in the output vlog.
+const TARGET_W: u32 = 1080;
+const TARGET_H: u32 = 1920;
 
 /// Errors from the concat stage.
 #[derive(Debug, thiserror::Error)]
@@ -20,27 +28,23 @@ pub(crate) enum ConcatError {
     Process(#[from] ProcessError),
 
     #[error(
-        "clip {} is {w}x{h}, but v1 only supports 9:16 (portrait).\n\
-         Either re-record in portrait mode, remove this clip from the input\n\
-         directory, or wait for aspect normalization in v2.",
+        "clip {} is {w}x{h} (landscape or square), but clipcast only supports portrait.\n\
+         Re-record in portrait mode or remove this clip from the input directory.",
         path.display()
     )]
-    ClipWrongAspect { path: PathBuf, w: u32, h: u32 },
+    ClipNotPortrait { path: PathBuf, w: u32, h: u32 },
 
     #[error("no kept clips to concat")]
     NothingToKeep,
 
-    #[error("failed to write concat manifest: {0}")]
-    ManifestWrite(#[source] std::io::Error),
-
-    #[error("ffmpeg concat failed even with re-encode fallback: {source}")]
+    #[error("ffmpeg concat failed: {source}")]
     ConcatFailed {
         #[source]
         source: ProcessError,
     },
 }
 
-/// Run the concat stage: aspect check → manifest → ffmpeg.
+/// Run the concat stage: portrait check → ffmpeg concat filter.
 pub(crate) async fn run(
     verdicts: &[ClipVerdict],
     metas_by_path: &HashMap<PathBuf, (u32, u32)>,
@@ -53,8 +57,8 @@ pub(crate) async fn run(
 
     for v in &kept {
         let (w, h) = metas_by_path.get(&v.path).copied().unwrap_or((0, 0));
-        if !is_nine_sixteen(w, h) {
-            return Err(ConcatError::ClipWrongAspect {
+        if !is_portrait(w, h) {
+            return Err(ConcatError::ClipNotPortrait {
                 path: v.path.clone(),
                 w,
                 h,
@@ -64,93 +68,64 @@ pub(crate) async fn run(
 
     kept.sort_by_key(|v| v.timestamp);
 
-    let manifest_path = output_path.with_extension("concat-manifest.txt");
-    let manifest_body = build_manifest(&kept);
-    std::fs::write(&manifest_path, manifest_body).map_err(ConcatError::ManifestWrite)?;
+    let args = build_ffmpeg_args(&kept, output_path);
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
 
-    let manifest_str = manifest_path.to_string_lossy().into_owned();
-    let out_str = output_path.to_string_lossy().into_owned();
-    let copy_result = process::run(
-        "ffmpeg",
-        [
-            "-nostdin",
-            "-loglevel",
-            "error",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            manifest_str.as_str(),
-            "-c",
-            "copy",
-            "-movflags",
-            "+faststart",
-            out_str.as_str(),
-        ],
-        std::iter::empty::<(&str, &str)>(),
-        None,
-    )
-    .await;
+    process::run("ffmpeg", arg_refs, std::iter::empty::<(&str, &str)>(), None)
+        .await
+        .map_err(|source| ConcatError::ConcatFailed { source })?;
 
-    if copy_result.is_ok() {
-        let _ = std::fs::remove_file(&manifest_path);
-        return Ok(());
-    }
-
-    let reencode_result = process::run(
-        "ffmpeg",
-        [
-            "-nostdin",
-            "-loglevel",
-            "error",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            manifest_str.as_str(),
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac",
-            "-crf",
-            "23",
-            "-preset",
-            "medium",
-            "-movflags",
-            "+faststart",
-            out_str.as_str(),
-        ],
-        std::iter::empty::<(&str, &str)>(),
-        None,
-    )
-    .await;
-
-    let _ = std::fs::remove_file(&manifest_path);
-
-    reencode_result.map_err(|source| ConcatError::ConcatFailed { source })?;
     Ok(())
 }
 
-fn is_nine_sixteen(w: u32, h: u32) -> bool {
-    if w == 0 || h == 0 {
-        return false;
-    }
-    let ratio = f64::from(w) / f64::from(h);
-    (ratio - 0.5625).abs() < 0.01
+fn is_portrait(w: u32, h: u32) -> bool {
+    w > 0 && h > 0 && h > w
 }
 
-fn build_manifest(kept: &[&ClipVerdict]) -> String {
-    let mut out = String::new();
+fn build_ffmpeg_args(kept: &[&ClipVerdict], output_path: &Path) -> Vec<String> {
+    let mut args: Vec<String> = vec![
+        "-nostdin".to_string(),
+        "-loglevel".to_string(),
+        "error".to_string(),
+        "-y".to_string(),
+    ];
+
     for v in kept {
-        let path = v.path.to_string_lossy();
-        let escaped = path.replace('\'', r"'\''");
-        out.push_str(&format!("file '{escaped}'\n"));
+        args.push("-i".to_string());
+        args.push(v.path.to_string_lossy().into_owned());
     }
-    out
+
+    args.push("-filter_complex".to_string());
+    args.push(build_filter_graph(kept.len()));
+
+    args.push("-map".to_string());
+    args.push("[outv]".to_string());
+    args.push("-c:v".to_string());
+    args.push("libx264".to_string());
+    args.push("-preset".to_string());
+    args.push("medium".to_string());
+    args.push("-crf".to_string());
+    args.push("23".to_string());
+    args.push("-movflags".to_string());
+    args.push("+faststart".to_string());
+    args.push(output_path.to_string_lossy().into_owned());
+
+    args
+}
+
+fn build_filter_graph(n: usize) -> String {
+    let mut filter = String::new();
+    for i in 0..n {
+        filter.push_str(&format!(
+            "[{i}:v]scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=decrease,\
+             pad={TARGET_W}:{TARGET_H}:(ow-iw)/2:(oh-ih)/2,setsar=1[v{i}];"
+        ));
+    }
+    for i in 0..n {
+        filter.push_str(&format!("[v{i}]"));
+    }
+    filter.push_str(&format!("concat=n={n}:v=1:a=0[outv]"));
+    filter
 }
 
 #[cfg(test)]
@@ -183,30 +158,35 @@ mod tests {
     }
 
     #[test]
-    fn nine_sixteen_detection() {
-        assert!(is_nine_sixteen(1080, 1920));
-        assert!(is_nine_sixteen(720, 1280));
-        assert!(!is_nine_sixteen(1920, 1080));
-        assert!(!is_nine_sixteen(1080, 1080));
-        assert!(!is_nine_sixteen(0, 1920));
-        assert!(!is_nine_sixteen(1080, 0));
+    fn portrait_detection() {
+        assert!(is_portrait(1080, 1920));
+        assert!(is_portrait(720, 1280));
+        assert!(is_portrait(1376, 1824));
+        assert!(is_portrait(1552, 2064));
+        assert!(!is_portrait(1920, 1080));
+        assert!(!is_portrait(1080, 1080));
+        assert!(!is_portrait(0, 1920));
+        assert!(!is_portrait(1080, 0));
     }
 
     #[test]
-    fn build_manifest_shape() -> TestResult {
-        let v1 = verdict("/tmp/a.mp4", 10.0, true)?;
-        let v2 = verdict("/tmp/b.mp4", 10.0, true)?;
-        let manifest = build_manifest(&[&v1, &v2]);
-        assert!(manifest.contains("file '/tmp/a.mp4'"));
-        assert!(manifest.contains("file '/tmp/b.mp4'"));
-        Ok(())
+    fn filter_graph_shape() {
+        let graph = build_filter_graph(3);
+        assert!(graph.contains("[0:v]scale=1080:1920"));
+        assert!(graph.contains("[1:v]scale=1080:1920"));
+        assert!(graph.contains("[2:v]scale=1080:1920"));
+        assert!(graph.contains("[v0][v1][v2]concat=n=3:v=1:a=0[outv]"));
     }
 
     #[test]
-    fn build_manifest_escapes_single_quotes() -> TestResult {
-        let v = verdict("/tmp/it's-a-clip.mp4", 10.0, true)?;
-        let manifest = build_manifest(&[&v]);
-        assert!(manifest.contains(r"'\''"));
+    fn ffmpeg_args_include_inputs_and_output() -> TestResult {
+        let v1 = verdict("/tmp/a.mov", 10.0, true)?;
+        let v2 = verdict("/tmp/b.mov", 10.0, true)?;
+        let args = build_ffmpeg_args(&[&v1, &v2], Path::new("/tmp/out.mp4"));
+        assert!(args.contains(&"/tmp/a.mov".to_string()));
+        assert!(args.contains(&"/tmp/b.mov".to_string()));
+        assert!(args.contains(&"/tmp/out.mp4".to_string()));
+        assert!(args.iter().any(|a| a == "-filter_complex"));
         Ok(())
     }
 }
