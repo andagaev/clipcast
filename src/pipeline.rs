@@ -4,4 +4,5 @@
 
 pub(crate) mod analyze;
 pub(crate) mod discover;
+pub(crate) mod filter;
 pub(crate) mod frames;

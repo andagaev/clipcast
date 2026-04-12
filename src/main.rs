@@ -45,6 +45,7 @@ fn main() {
     let _ = || analyzer::claude_print::ClaudePrintAnalyzer;
     let _ = <analyzer::claude_print::ClaudePrintAnalyzer as analyzer::ClipAnalyzer>::analyze;
     let _ = pipeline::analyze::run::<analyzer::claude_print::ClaudePrintAnalyzer>;
+    let _ = pipeline::filter::apply;
     let _ = |c: clip::Clip| {
         let clip::Clip { path, meta } = c;
         let clip::ClipMeta {
