@@ -26,7 +26,7 @@ struct Cli {
 enum Command {
     /// Run the full pipeline: discover, analyze, filter, concat.
     Build {
-        /// Path to the input directory containing .mp4 clips.
+        /// Path to the input directory containing .mp4 / .mov clips.
         input_dir: PathBuf,
         /// Target vlog duration (e.g., "3m", "2m30s", "90s", "300").
         #[arg(long, default_value = "3m")]
@@ -44,7 +44,7 @@ enum Command {
     /// Run discover + frame extraction + LLM scoring + filter, then write
     /// decisions.json. Stops before concat.
     Analyze {
-        /// Path to the input directory containing .mp4 clips.
+        /// Path to the input directory containing .mp4 / .mov clips.
         input_dir: PathBuf,
         /// Target vlog duration (for budget-fill in the filter stage).
         #[arg(long, default_value = "3m")]
@@ -62,7 +62,7 @@ enum Command {
     /// Read an existing decisions.json sidecar and concat the kept clips
     /// (trusting the sidecar's `keep` values as authoritative).
     Render {
-        /// Path to the input directory containing the .mp4 clips and sidecar.
+        /// Path to the input directory containing the video clips and sidecar.
         input_dir: PathBuf,
         /// Override the output .mp4 path.
         #[arg(long)]

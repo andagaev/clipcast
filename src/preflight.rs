@@ -28,7 +28,7 @@ pub(crate) enum PreflightError {
     #[error("input directory is not a directory: {}", path.display())]
     InputDirNotADir { path: PathBuf },
 
-    #[error("no .mp4 files found in {}", path.display())]
+    #[error("no video clips (.mp4 or .mov) found in {}", path.display())]
     NoClipsFound { path: PathBuf },
 
     #[error("failed to read directory {}: {source}", path.display())]
@@ -50,7 +50,8 @@ pub(crate) fn check_binaries() -> Result<(), PreflightError> {
 }
 
 /// Check that the input directory exists, is a directory, and contains
-/// at least one `.mp4` file at the top level (or recursively if `recursive`).
+/// at least one video clip (.mp4 or .mov) at the top level (or recursively
+/// if `recursive`).
 pub(crate) fn check_input_dir(dir: &Path, recursive: bool) -> Result<(), PreflightError> {
     if !dir.exists() {
         return Err(PreflightError::InputDirMissing {
@@ -63,7 +64,7 @@ pub(crate) fn check_input_dir(dir: &Path, recursive: bool) -> Result<(), Preflig
         });
     }
 
-    if has_mp4(dir, recursive)? {
+    if has_clip(dir, recursive)? {
         Ok(())
     } else {
         Err(PreflightError::NoClipsFound {
@@ -72,7 +73,7 @@ pub(crate) fn check_input_dir(dir: &Path, recursive: bool) -> Result<(), Preflig
     }
 }
 
-fn has_mp4(dir: &Path, recursive: bool) -> Result<bool, PreflightError> {
+fn has_clip(dir: &Path, recursive: bool) -> Result<bool, PreflightError> {
     let entries = std::fs::read_dir(dir).map_err(|source| PreflightError::ReadDirFailed {
         path: dir.to_path_buf(),
         source,
@@ -84,20 +85,21 @@ fn has_mp4(dir: &Path, recursive: bool) -> Result<bool, PreflightError> {
             source,
         })?;
         let path = entry.path();
-        if path.is_file() && is_mp4(&path) {
+        if path.is_file() && is_video_clip(&path) {
             return Ok(true);
         }
-        if recursive && path.is_dir() && has_mp4(&path, true)? {
+        if recursive && path.is_dir() && has_clip(&path, true)? {
             return Ok(true);
         }
     }
     Ok(false)
 }
 
-fn is_mp4(path: &Path) -> bool {
+/// Accepted input extensions: `.mp4` and `.mov` (case-insensitive).
+fn is_video_clip(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("mp4"))
+        .is_some_and(|e| e.eq_ignore_ascii_case("mp4") || e.eq_ignore_ascii_case("mov"))
 }
 
 #[cfg(test)]

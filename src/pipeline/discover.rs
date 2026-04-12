@@ -1,6 +1,6 @@
 //! Discover clips in an input directory and read their metadata via `ffprobe`.
 //!
-//! For each `.mp4` file found, runs `ffprobe -v quiet -print_format json
+//! For each `.mp4` / `.mov` file found, runs `ffprobe -v quiet -print_format json
 //! -show_format -show_streams <path>` and parses:
 //! - `format.duration` → duration in seconds
 //! - `streams[video].width` / `height` → resolution
@@ -47,10 +47,10 @@ pub(crate) enum DiscoverError {
     },
 }
 
-/// Walk `dir` (optionally recursively), find `.mp4` files, run ffprobe,
+/// Walk `dir` (optionally recursively), find `.mp4` / `.mov` files, run ffprobe,
 /// and build a `Vec<Clip>` sorted by resolved timestamp ascending.
 pub(crate) async fn run(dir: &Path, recursive: bool) -> Result<Vec<Clip>, DiscoverError> {
-    let paths = collect_mp4_paths(dir, recursive)?;
+    let paths = collect_clip_paths(dir, recursive)?;
     let mut clips = Vec::with_capacity(paths.len());
     for path in paths {
         let clip = describe(&path).await?;
@@ -60,13 +60,13 @@ pub(crate) async fn run(dir: &Path, recursive: bool) -> Result<Vec<Clip>, Discov
     Ok(clips)
 }
 
-fn collect_mp4_paths(dir: &Path, recursive: bool) -> Result<Vec<PathBuf>, DiscoverError> {
+fn collect_clip_paths(dir: &Path, recursive: bool) -> Result<Vec<PathBuf>, DiscoverError> {
     let mut out = Vec::new();
-    collect_mp4_into(dir, recursive, &mut out)?;
+    collect_clips_into(dir, recursive, &mut out)?;
     Ok(out)
 }
 
-fn collect_mp4_into(
+fn collect_clips_into(
     dir: &Path,
     recursive: bool,
     out: &mut Vec<PathBuf>,
@@ -81,19 +81,20 @@ fn collect_mp4_into(
             source,
         })?;
         let path = entry.path();
-        if path.is_file() && is_mp4(&path) {
+        if path.is_file() && is_video_clip(&path) {
             out.push(path);
         } else if recursive && path.is_dir() {
-            collect_mp4_into(&path, true, out)?;
+            collect_clips_into(&path, true, out)?;
         }
     }
     Ok(())
 }
 
-fn is_mp4(path: &Path) -> bool {
+/// Accepted input extensions: `.mp4` and `.mov` (case-insensitive).
+fn is_video_clip(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("mp4"))
+        .is_some_and(|e| e.eq_ignore_ascii_case("mp4") || e.eq_ignore_ascii_case("mov"))
 }
 
 async fn describe(path: &Path) -> Result<Clip, DiscoverError> {
