@@ -1,6 +1,7 @@
 mod clip;
 mod duration;
 mod paths;
+mod process;
 mod sidecar;
 
 fn main() {
@@ -19,6 +20,14 @@ fn main() {
         } = s;
         (clipcast_version, generated_at, target_duration_s, clips)
     };
+    let _ = |o: process::Output| {
+        let process::Output { stdout, stderr } = o;
+        (stdout, stderr)
+    };
+    let _ = process::ProcessError::KilledBySignal {
+        program: String::new(),
+    };
+    let _ = process::run::<[&str; 0], &str, [(&str, &str); 0], &str, &str>;
     let _ = |c: clip::Clip| {
         let clip::Clip { path, meta } = c;
         let clip::ClipMeta {
