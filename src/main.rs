@@ -1,3 +1,4 @@
+mod analyzer;
 mod clip;
 mod duration;
 mod paths;
@@ -41,6 +42,8 @@ fn main() {
         let pipeline::frames::ClipFrames { clip, frame_paths } = f;
         (clip, frame_paths)
     };
+    let _ = || analyzer::claude_print::ClaudePrintAnalyzer;
+    let _ = <analyzer::claude_print::ClaudePrintAnalyzer as analyzer::ClipAnalyzer>::analyze;
     let _ = |c: clip::Clip| {
         let clip::Clip { path, meta } = c;
         let clip::ClipMeta {
