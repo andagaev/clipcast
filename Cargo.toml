@@ -39,6 +39,7 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 module_name_repetitions = "allow"
 struct_field_names = "allow"
+cast_precision_loss = "allow"
 
 [profile.release]
 codegen-units = 1

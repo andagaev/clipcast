@@ -3,3 +3,4 @@
 //! This module is a router: no runtime logic, just declarations.
 
 pub(crate) mod discover;
+pub(crate) mod frames;

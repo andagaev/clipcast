@@ -34,6 +34,13 @@ fn main() {
     let _ = preflight::check_input_dir;
     let _ = preflight::REQUIRED_BINARIES;
     let _ = pipeline::discover::run;
+    let _ = pipeline::frames::run;
+    let _ = pipeline::frames::FRAMES_PER_CLIP;
+    let _ = pipeline::frames::FRAME_MAX_WIDTH;
+    let _ = |f: pipeline::frames::ClipFrames| {
+        let pipeline::frames::ClipFrames { clip, frame_paths } = f;
+        (clip, frame_paths)
+    };
     let _ = |c: clip::Clip| {
         let clip::Clip { path, meta } = c;
         let clip::ClipMeta {
