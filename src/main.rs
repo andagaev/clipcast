@@ -1,5 +1,9 @@
+//! clipcast — personal CLI that turns a directory of short video clips
+//! into one combined vlog video via multimodal LLM scoring.
+
 mod analyzer;
 mod clip;
+mod commands;
 mod duration;
 mod paths;
 mod pipeline;
@@ -7,81 +11,89 @@ mod preflight;
 mod process;
 mod sidecar;
 
-fn main() {
-    let _ = duration::parse;
-    let _ = paths::default_output;
-    let _ = paths::sidecar_for;
-    let _ = sidecar::read;
-    let _ = sidecar::write;
-    let _ = sidecar::build;
-    let _ = |s: sidecar::Sidecar| {
-        let sidecar::Sidecar {
-            clipcast_version,
-            generated_at,
-            target_duration_s,
-            clips,
-        } = s;
-        (clipcast_version, generated_at, target_duration_s, clips)
-    };
-    let _ = |o: process::Output| {
-        let process::Output { stdout, stderr } = o;
-        (stdout, stderr)
-    };
-    let _ = process::ProcessError::KilledBySignal {
-        program: String::new(),
-    };
-    let _ = process::run::<[&str; 0], &str, [(&str, &str); 0], &str, &str>;
-    let _ = preflight::check_binaries;
-    let _ = preflight::check_input_dir;
-    let _ = preflight::REQUIRED_BINARIES;
-    let _ = pipeline::discover::run;
-    let _ = pipeline::frames::run;
-    let _ = pipeline::frames::FRAMES_PER_CLIP;
-    let _ = pipeline::frames::FRAME_MAX_WIDTH;
-    let _ = |f: pipeline::frames::ClipFrames| {
-        let pipeline::frames::ClipFrames { clip, frame_paths } = f;
-        (clip, frame_paths)
-    };
-    let _ = || analyzer::claude_print::ClaudePrintAnalyzer;
-    let _ = <analyzer::claude_print::ClaudePrintAnalyzer as analyzer::ClipAnalyzer>::analyze;
-    let _ = pipeline::analyze::run::<analyzer::claude_print::ClaudePrintAnalyzer>;
-    let _ = pipeline::filter::apply;
-    let _ = pipeline::concat::run;
-    let _ = |c: clip::Clip| {
-        let clip::Clip { path, meta } = c;
-        let clip::ClipMeta {
-            duration_s,
-            width,
-            height,
-            timestamp,
-            timestamp_source,
-        } = meta;
-        (path, duration_s, width, height, timestamp, timestamp_source)
-    };
-    let _ = |v: clip::ClipVerdict| {
-        let clip::ClipVerdict {
-            path,
-            duration_s,
-            timestamp,
-            timestamp_source,
-            score,
-            reason,
-            error,
-            keep,
-        } = v;
-        (
-            path,
-            duration_s,
-            timestamp,
-            timestamp_source,
-            score,
-            reason,
-            error,
-            keep,
-        )
-    };
-    let _ = clip::TimestampSource::CreationTime;
-    let _ = clip::TimestampSource::FilenamePattern;
-    let _ = clip::TimestampSource::FileMtime;
-    println!("clipcast v{}", env!("CARGO_PKG_VERSION"));
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+
+#[derive(Parser)]
+#[command(name = "clipcast", version, about)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Run the full pipeline: discover, analyze, filter, concat.
+    Build {
+        /// Path to the input directory containing .mp4 clips.
+        input_dir: PathBuf,
+        /// Target vlog duration (e.g., "3m", "2m30s", "90s", "300").
+        #[arg(long, default_value = "3m")]
+        duration: String,
+        /// Override the output .mp4 path. Default: <input-dir>/vlog-YYYY-MM-DD.mp4
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Max concurrent LLM calls.
+        #[arg(long, default_value_t = 3)]
+        concurrency: usize,
+        /// Scan subdirectories too.
+        #[arg(long)]
+        recursive: bool,
+    },
+    /// Run discover + frame extraction + LLM scoring + filter, then write
+    /// decisions.json. Stops before concat.
+    Analyze {
+        /// Path to the input directory containing .mp4 clips.
+        input_dir: PathBuf,
+        /// Target vlog duration (for budget-fill in the filter stage).
+        #[arg(long, default_value = "3m")]
+        duration: String,
+        /// Override the sidecar path base. Default: <input-dir>/vlog-YYYY-MM-DD.mp4
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Max concurrent LLM calls.
+        #[arg(long, default_value_t = 3)]
+        concurrency: usize,
+        /// Scan subdirectories too.
+        #[arg(long)]
+        recursive: bool,
+    },
+    /// Read an existing decisions.json sidecar and concat the kept clips
+    /// (trusting the sidecar's `keep` values as authoritative).
+    Render {
+        /// Path to the input directory containing the .mp4 clips and sidecar.
+        input_dir: PathBuf,
+        /// Override the output .mp4 path.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let cli = Cli::parse();
+    match cli.command {
+        Command::Build {
+            input_dir,
+            duration,
+            out,
+            concurrency,
+            recursive,
+        } => {
+            let target = duration::parse(&duration)?;
+            commands::build::run(&input_dir, target, out, concurrency, recursive).await
+        }
+        Command::Analyze {
+            input_dir,
+            duration,
+            out,
+            concurrency,
+            recursive,
+        } => {
+            let target = duration::parse(&duration)?;
+            commands::analyze::run(&input_dir, target, out, concurrency, recursive).await
+        }
+        Command::Render { input_dir, out } => commands::render::run(&input_dir, out).await,
+    }
 }

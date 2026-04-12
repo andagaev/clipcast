@@ -36,7 +36,7 @@ impl ClipAnalyzer for ClaudePrintAnalyzer {
         )
         .await?;
 
-        parse_verdict(clip, &output.stdout)
+        parse_verdict(clip, &output.stdout, &output.stderr)
     }
 }
 
@@ -79,15 +79,23 @@ struct Wire {
     reason: String,
 }
 
-fn parse_verdict(clip: &Clip, stdout: &[u8]) -> Result<ClipVerdict, AnalyzerError> {
+fn parse_verdict(clip: &Clip, stdout: &[u8], stderr: &[u8]) -> Result<ClipVerdict, AnalyzerError> {
     let raw = String::from_utf8_lossy(stdout).trim().to_string();
     if raw.is_empty() {
         return Err(AnalyzerError::Empty);
     }
 
-    let wire: Wire = serde_json::from_str(&raw).map_err(|e| AnalyzerError::ParseFailed {
-        details: e.to_string(),
-        raw: raw.clone(),
+    let wire: Wire = serde_json::from_str(&raw).map_err(|e| {
+        let stderr_text = String::from_utf8_lossy(stderr);
+        let details = if stderr_text.trim().is_empty() {
+            e.to_string()
+        } else {
+            format!("{e}\nstderr: {stderr_text}")
+        };
+        AnalyzerError::ParseFailed {
+            details,
+            raw: raw.clone(),
+        }
     })?;
 
     Ok(ClipVerdict {
@@ -146,7 +154,7 @@ mod tests {
     fn parse_verdict_happy_path() -> TestResult {
         let clip = sample_clip()?;
         let stdout = br#"{"score": 8, "reason": "clear subject"}"#;
-        let v = parse_verdict(&clip, stdout)?;
+        let v = parse_verdict(&clip, stdout, b"")?;
         assert_eq!(v.score, Some(8));
         assert_eq!(v.reason.as_deref(), Some("clear subject"));
         assert_eq!(v.error, None);
@@ -158,7 +166,7 @@ mod tests {
     fn parse_verdict_clamps_out_of_range() -> TestResult {
         let clip = sample_clip()?;
         let stdout = br#"{"score": 255, "reason": "huh"}"#;
-        let v = parse_verdict(&clip, stdout)?;
+        let v = parse_verdict(&clip, stdout, b"")?;
         assert_eq!(v.score, Some(10));
         Ok(())
     }
@@ -166,7 +174,9 @@ mod tests {
     #[test]
     fn parse_verdict_rejects_empty() -> TestResult {
         let clip = sample_clip()?;
-        let err = parse_verdict(&clip, b"").err().ok_or("expected error")?;
+        let err = parse_verdict(&clip, b"", b"")
+            .err()
+            .ok_or("expected error")?;
         if !matches!(err, AnalyzerError::Empty) {
             return Err(format!("wrong variant: {err:?}").into());
         }
@@ -176,7 +186,7 @@ mod tests {
     #[test]
     fn parse_verdict_rejects_garbage() -> TestResult {
         let clip = sample_clip()?;
-        let err = parse_verdict(&clip, b"not json at all")
+        let err = parse_verdict(&clip, b"not json at all", b"")
             .err()
             .ok_or("expected error")?;
         if !matches!(err, AnalyzerError::ParseFailed { .. }) {
