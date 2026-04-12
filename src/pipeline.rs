@@ -3,6 +3,7 @@
 //! This module is a router: no runtime logic, just declarations.
 
 pub(crate) mod analyze;
+pub(crate) mod concat;
 pub(crate) mod discover;
 pub(crate) mod filter;
 pub(crate) mod frames;
