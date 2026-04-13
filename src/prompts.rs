@@ -27,8 +27,8 @@ pub(crate) fn resolve(name: &str) -> Result<&'static str, PromptError> {
     }
 }
 
-/// Every valid profile name (useful for CLI help and tests).
-pub(crate) const NAMES: &[&str] = &["default", "adventure", "family"];
+#[cfg(test)]
+const NAMES: &[&str] = &["default", "adventure", "family"];
 
 #[cfg(test)]
 mod tests {

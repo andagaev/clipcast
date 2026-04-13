@@ -16,16 +16,6 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-#[allow(dead_code)]
-const _UNUSED_REFS: fn() = || {
-    let _ = preflight::OPTIONAL_WHISPER;
-    let _ = preflight::resolve_whisper_model;
-    let _ = pipeline::transcribe::run;
-    let _ = pipeline::transcribe::transcribe_one;
-    let _ = prompts::resolve;
-    let _ = prompts::NAMES;
-};
-
 #[derive(Parser)]
 #[command(name = "clipcast", version, about)]
 struct Cli {
@@ -51,6 +41,9 @@ enum Command {
         /// Scan subdirectories too.
         #[arg(long)]
         recursive: bool,
+        /// Prompt profile: default | adventure | family.
+        #[arg(long, default_value = "default")]
+        prompt_profile: String,
     },
     /// Run discover + frame extraction + LLM scoring + filter, then write
     /// decisions.json. Stops before concat.
@@ -69,6 +62,9 @@ enum Command {
         /// Scan subdirectories too.
         #[arg(long)]
         recursive: bool,
+        /// Prompt profile: default | adventure | family.
+        #[arg(long, default_value = "default")]
+        prompt_profile: String,
     },
     /// Read an existing decisions.json sidecar and concat the kept clips
     /// (trusting the sidecar's `keep` values as authoritative).
@@ -100,6 +96,9 @@ enum Command {
         /// Override the output .mp4 path (used to locate the sidecar).
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Prompt profile: default | adventure | family.
+        #[arg(long, default_value = "default")]
+        prompt_profile: String,
     },
 }
 
@@ -113,9 +112,18 @@ async fn main() -> Result<()> {
             out,
             concurrency,
             recursive,
+            prompt_profile,
         } => {
             let target = duration::parse(&duration)?;
-            commands::build::run(&input_dir, target, out, concurrency, recursive).await
+            commands::build::run(
+                &input_dir,
+                target,
+                out,
+                concurrency,
+                recursive,
+                &prompt_profile,
+            )
+            .await
         }
         Command::Analyze {
             input_dir,
@@ -123,9 +131,18 @@ async fn main() -> Result<()> {
             out,
             concurrency,
             recursive,
+            prompt_profile,
         } => {
             let target = duration::parse(&duration)?;
-            commands::analyze::run(&input_dir, target, out, concurrency, recursive).await
+            commands::analyze::run(
+                &input_dir,
+                target,
+                out,
+                concurrency,
+                recursive,
+                &prompt_profile,
+            )
+            .await
         }
         Command::Render { input_dir, out } => commands::render::run(&input_dir, out).await,
         Command::List {
@@ -137,6 +154,7 @@ async fn main() -> Result<()> {
             input_dir,
             clip,
             out,
-        } => commands::add::run(&input_dir, &clip, out).await,
+            prompt_profile,
+        } => commands::add::run(&input_dir, &clip, out, &prompt_profile).await,
     }
 }

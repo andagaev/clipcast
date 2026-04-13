@@ -3,8 +3,9 @@
 
 use crate::analyzer::claude_print::ClaudePrintAnalyzer;
 use crate::paths;
-use crate::pipeline::{analyze, discover, filter, frames};
+use crate::pipeline::{analyze, discover, filter, frames, transcribe};
 use crate::preflight;
+use crate::prompts;
 use crate::sidecar;
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -19,20 +20,28 @@ pub(crate) async fn run(
     out: Option<PathBuf>,
     concurrency: usize,
     recursive: bool,
+    profile: &str,
 ) -> Result<()> {
     preflight::check_binaries().context("preflight: missing binary")?;
     preflight::check_input_dir(input_dir, recursive).context("preflight: input dir")?;
 
+    let profile_body = prompts::resolve(profile).context("resolve prompt profile")?;
+    let whisper_model = preflight::resolve_whisper_model();
+
     let output_path = out.unwrap_or_else(|| paths::default_output(input_dir, Utc::now()));
 
-    let clips = discover::run(input_dir, recursive)
+    let mut clips = discover::run(input_dir, recursive)
         .await
         .context("discover stage failed")?;
+
+    transcribe::run(&mut clips, whisper_model.as_deref())
+        .await
+        .context("transcribe stage failed")?;
+
     let (_tempdir, clip_frames) = frames::run(clips)
         .await
         .context("frame extraction stage failed")?;
 
-    let profile_body = crate::prompts::resolve("default").context("resolve prompt profile")?;
     let analyzer = Arc::new(ClaudePrintAnalyzer::new(profile_body));
     let mut verdicts = analyze::run(analyzer, clip_frames, concurrency).await;
 
