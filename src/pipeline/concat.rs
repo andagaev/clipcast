@@ -51,7 +51,7 @@ pub(crate) async fn run(
     metas_by_path: &HashMap<PathBuf, (u32, u32)>,
     output_path: &Path,
 ) -> Result<(), ConcatError> {
-    let mut kept: Vec<&ClipVerdict> = verdicts.iter().filter(|v| v.keep).collect();
+    let kept: Vec<&ClipVerdict> = verdicts.iter().filter(|v| v.keep).collect();
     if kept.is_empty() {
         return Err(ConcatError::NothingToKeep);
     }
@@ -67,7 +67,8 @@ pub(crate) async fn run(
         }
     }
 
-    kept.sort_by_key(|v| v.timestamp);
+    // Sidecar order is authoritative: kept is already in `decisions.json`
+    // array order, which matches how the user (or agent) arranged it.
 
     let args = build_ffmpeg_args(&kept, output_path);
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();

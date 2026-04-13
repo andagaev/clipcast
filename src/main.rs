@@ -68,6 +68,28 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Print the current sidecar state (clips, order, keep flags, scores).
+    List {
+        /// Path to the input directory containing the sidecar.
+        input_dir: PathBuf,
+        /// Override the output .mp4 path (used to locate the sidecar).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Emit machine-readable JSON instead of human text.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Analyze one new clip with the LLM and append it to the sidecar
+    /// (keep = true). Run `render` afterwards to rebuild the vlog.
+    Add {
+        /// Path to the input directory containing the sidecar.
+        input_dir: PathBuf,
+        /// Absolute or relative path to the clip to analyze.
+        clip: PathBuf,
+        /// Override the output .mp4 path (used to locate the sidecar).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -95,5 +117,15 @@ async fn main() -> Result<()> {
             commands::analyze::run(&input_dir, target, out, concurrency, recursive).await
         }
         Command::Render { input_dir, out } => commands::render::run(&input_dir, out).await,
+        Command::List {
+            input_dir,
+            out,
+            json,
+        } => commands::list::run(&input_dir, out, json).await,
+        Command::Add {
+            input_dir,
+            clip,
+            out,
+        } => commands::add::run(&input_dir, &clip, out).await,
     }
 }

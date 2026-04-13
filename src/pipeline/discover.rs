@@ -97,7 +97,8 @@ fn is_video_clip(path: &Path) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case("mp4") || e.eq_ignore_ascii_case("mov"))
 }
 
-async fn describe(path: &Path) -> Result<Clip, DiscoverError> {
+/// Run ffprobe on a single clip path and return its parsed metadata.
+pub(crate) async fn describe(path: &Path) -> Result<Clip, DiscoverError> {
     let path_str = path.to_string_lossy().into_owned();
     let output = process::run(
         "ffprobe",
