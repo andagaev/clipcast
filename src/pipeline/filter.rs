@@ -112,6 +112,7 @@ mod tests {
             reason: None,
             error: error.map(str::to_string),
             keep: false,
+            transcript: None,
         })
     }
 

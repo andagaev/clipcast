@@ -76,6 +76,7 @@ async fn analyze_with_retries<A: ClipAnalyzer>(analyzer: &A, cf: &ClipFrames) ->
         reason: None,
         error: Some(error_msg),
         keep: false,
+        transcript: cf.clip.transcript.clone(),
     }
 }
 
@@ -105,6 +106,7 @@ mod tests {
                     timestamp: ts,
                     timestamp_source: TimestampSource::CreationTime,
                 },
+                transcript: None,
             },
             frame_paths: vec![PathBuf::from("/tmp/f0.jpg")],
         })
@@ -126,6 +128,7 @@ mod tests {
                 reason: Some("always 8".to_string()),
                 error: None,
                 keep: false,
+                transcript: None,
             })
         }
     }
@@ -153,6 +156,7 @@ mod tests {
                     reason: Some("eventually".to_string()),
                     error: None,
                     keep: false,
+                    transcript: None,
                 })
             }
         }

@@ -7,3 +7,4 @@ pub(crate) mod concat;
 pub(crate) mod discover;
 pub(crate) mod filter;
 pub(crate) mod frames;
+pub(crate) mod transcribe;

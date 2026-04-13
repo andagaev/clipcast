@@ -10,6 +10,10 @@ pub(crate) const REQUIRED_BINARIES: &[(&str, &str)] = &[
     ("claude", "already installed if you use Claude Code"),
 ];
 
+/// Optional binary: whisper.cpp's `whisper-cli` for audio transcription.
+/// If missing, clipcast skips transcription and relies on frames alone.
+pub(crate) const OPTIONAL_WHISPER: &str = "whisper-cli";
+
 /// Errors returned from preflight checks.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum PreflightError {
@@ -100,6 +104,43 @@ fn is_video_clip(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
         .is_some_and(|e| e.eq_ignore_ascii_case("mp4") || e.eq_ignore_ascii_case("mov"))
+}
+
+/// Resolve the path to a whisper `.bin` model file, if one is available.
+///
+/// Resolution order (first hit wins):
+/// 1. `$CLIPCAST_MODEL` (absolute path to a `.bin`)
+/// 2. `$CLIPCAST_MODELS_DIR/ggml-small.en.bin`
+/// 3. `~/.whisper-cpp-models/ggml-small.en.bin` (whisper.cpp convention)
+///
+/// Returns `None` if none of the locations contain a model — in that
+/// case, clipcast skips transcription rather than erroring out.
+pub(crate) fn resolve_whisper_model() -> Option<PathBuf> {
+    if which::which(OPTIONAL_WHISPER).is_err() {
+        return None;
+    }
+
+    if let Some(path) = std::env::var_os("CLIPCAST_MODEL").map(PathBuf::from) {
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    if let Some(dir) = std::env::var_os("CLIPCAST_MODELS_DIR").map(PathBuf::from) {
+        let candidate = dir.join("ggml-small.en.bin");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+        let candidate = home.join(".whisper-cpp-models").join("ggml-small.en.bin");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    None
 }
 
 #[cfg(test)]

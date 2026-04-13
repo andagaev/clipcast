@@ -8,6 +8,9 @@ use std::path::PathBuf;
 pub(crate) struct Clip {
     pub(crate) path: PathBuf,
     pub(crate) meta: ClipMeta,
+    /// Transcript extracted from the clip's audio via whisper.cpp.
+    /// `None` means transcription was skipped (no model) or produced nothing.
+    pub(crate) transcript: Option<String>,
 }
 
 /// Metadata extracted from a clip via `ffprobe` + timestamp resolution.
@@ -55,6 +58,11 @@ pub(crate) struct ClipVerdict {
     /// filter stage (`build` / `analyze`), honored as-is by `render`.
     #[serde(default)]
     pub(crate) keep: bool,
+
+    /// Transcript that was fed to the LLM during analysis, if any.
+    /// Stored in the sidecar for user visibility and debugging.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) transcript: Option<String>,
 }
 
 #[cfg(test)]
@@ -78,6 +86,7 @@ mod tests {
             reason: Some("clear subject".to_string()),
             error: None,
             keep: true,
+            transcript: None,
         })
     }
 
@@ -136,6 +145,7 @@ mod tests {
             reason: None,
             error: Some("timed out".to_string()),
             keep: false,
+            transcript: None,
         };
         let json = serde_json::to_string(&v)?;
         let parsed: ClipVerdict = serde_json::from_str(&json)?;

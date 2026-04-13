@@ -107,6 +107,7 @@ fn parse_verdict(clip: &Clip, stdout: &[u8], stderr: &[u8]) -> Result<ClipVerdic
         reason: Some(wire.reason),
         error: None,
         keep: false,
+        transcript: clip.transcript.clone(),
     })
 }
 
@@ -133,6 +134,7 @@ mod tests {
                 timestamp: ts,
                 timestamp_source: TimestampSource::CreationTime,
             },
+            transcript: None,
         })
     }
 

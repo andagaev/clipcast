@@ -105,6 +105,7 @@ mod tests {
                 reason: Some("good".to_string()),
                 error: None,
                 keep: true,
+                transcript: None,
             },
             ClipVerdict {
                 path: PathBuf::from("b.mp4"),
@@ -115,6 +116,7 @@ mod tests {
                 reason: Some("boring".to_string()),
                 error: None,
                 keep: false,
+                transcript: None,
             },
         ])
     }

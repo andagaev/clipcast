@@ -15,6 +15,14 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+#[allow(dead_code)]
+const _UNUSED_WHISPER_REFS: fn() = || {
+    let _ = preflight::OPTIONAL_WHISPER;
+    let _ = preflight::resolve_whisper_model;
+    let _ = pipeline::transcribe::run;
+    let _ = pipeline::transcribe::transcribe_one;
+};
+
 #[derive(Parser)]
 #[command(name = "clipcast", version, about)]
 struct Cli {

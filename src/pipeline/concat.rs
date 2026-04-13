@@ -165,6 +165,7 @@ mod tests {
             reason: None,
             error: None,
             keep,
+            transcript: None,
         })
     }
 

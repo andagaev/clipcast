@@ -152,6 +152,7 @@ pub(crate) async fn describe(path: &Path) -> Result<Clip, DiscoverError> {
             timestamp,
             timestamp_source,
         },
+        transcript: None,
     })
 }
 
