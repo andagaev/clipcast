@@ -32,10 +32,14 @@ pub(crate) async fn run(
     }
 
     let output_path = out.unwrap_or_else(|| paths::default_output(input_dir, Utc::now()));
+    let output_abs = output_path
+        .canonicalize()
+        .unwrap_or_else(|_| output_path.clone());
 
     let mut clips = discover::run(input_dir, recursive)
         .await
         .context("discover stage failed")?;
+    clips.retain(|c| c.path.canonicalize().map_or(true, |abs| abs != output_abs));
     println!("discovered {} clips", clips.len());
 
     let metas_by_path: HashMap<PathBuf, (u32, u32)> = clips

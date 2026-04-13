@@ -84,6 +84,7 @@ fn print_json(sidecar_path: &Path, side: &sidecar::Sidecar) -> Result<()> {
                 "error": c.error,
                 "timestamp": c.timestamp,
                 "timestamp_source": c.timestamp_source,
+                "transcript": c.transcript,
             })
         })
         .collect();
