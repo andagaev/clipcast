@@ -60,7 +60,8 @@ pub(crate) async fn run(input_dir: &Path, clip_path: &Path, out: Option<PathBuf>
         .ok_or_else(|| anyhow!("no frames extracted"))?;
     println!("extracted {} frames", cf.frame_paths.len());
 
-    let analyzer = ClaudePrintAnalyzer;
+    let profile_body = crate::prompts::resolve("default").context("resolve prompt profile")?;
+    let analyzer = ClaudePrintAnalyzer::new(profile_body);
     let frame_refs: Vec<&Path> = cf.frame_paths.iter().map(PathBuf::as_path).collect();
     let mut verdict = analyzer
         .analyze(&cf.clip, &frame_refs)

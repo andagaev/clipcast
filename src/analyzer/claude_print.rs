@@ -12,11 +12,21 @@ use crate::process;
 use std::path::Path;
 
 /// v1 analyzer backend: shells out to `claude -p` with frame attachments.
-pub(crate) struct ClaudePrintAnalyzer;
+///
+/// `profile_body` is the rubric text from `crate::prompts::resolve(...)`.
+pub(crate) struct ClaudePrintAnalyzer {
+    pub(crate) profile_body: &'static str,
+}
+
+impl ClaudePrintAnalyzer {
+    pub(crate) fn new(profile_body: &'static str) -> Self {
+        Self { profile_body }
+    }
+}
 
 impl ClipAnalyzer for ClaudePrintAnalyzer {
     async fn analyze(&self, clip: &Clip, frames: &[&Path]) -> Result<ClipVerdict, AnalyzerError> {
-        let prompt = compose_prompt(clip, frames);
+        let prompt = compose_prompt(self.profile_body, clip, frames);
 
         let output = process::run(
             "claude",
@@ -40,29 +50,33 @@ impl ClipAnalyzer for ClaudePrintAnalyzer {
     }
 }
 
-fn compose_prompt(clip: &Clip, frames: &[&Path]) -> String {
+fn compose_prompt(profile_body: &str, clip: &Clip, frames: &[&Path]) -> String {
     let frame_refs: String = frames
         .iter()
         .map(|p| format!("@{}", p.display()))
         .collect::<Vec<_>>()
         .join(" ");
 
+    let transcript_section = match clip.transcript.as_deref() {
+        Some(t) if !t.trim().is_empty() => {
+            format!("\n## Transcript (from audio)\n{}\n", t.trim())
+        }
+        _ => String::from("\n## Transcript (from audio)\n(no audio transcript available)\n"),
+    };
+
     format!(
-        "You are scoring a short video clip for inclusion in a personal vlog.\n\
+        "{profile_body}\n\
          \n\
-         Clip file: {path}\n\
+         ## Clip\n\
+         File: {path}\n\
          Duration: {duration:.1}s\n\
          Recorded: {timestamp}\n\
-         \n\
-         Here are 5 frames from the clip at 0%, 25%, 50%, 75%, and 100% \
-         of its duration:\n\
+         {transcript_section}\n\
+         ## Frames\n\
+         5 frames from 0%, 25%, 50%, 75%, and 100% of the clip:\n\
          {frames}\n\
          \n\
-         Score this clip from 1 to 10 for \"how interesting is it to watch\".\n\
-         Higher scores mean better composition, clearer subject, more action, \
-         or more emotional impact. Lower scores mean shaky camera, boring \
-         subject, mostly ground, or visual noise.\n\
-         \n\
+         ## Response format\n\
          Respond with ONLY a JSON object like:\n\
          {{\"score\": 7, \"reason\": \"one-sentence explanation\"}}\n\
          Do not include any text outside the JSON. Do not wrap in a code fence.",
@@ -144,11 +158,31 @@ mod tests {
         let f1 = PathBuf::from("/tmp/frame_0.jpg");
         let f2 = PathBuf::from("/tmp/frame_1.jpg");
         let frames: Vec<&Path> = vec![f1.as_path(), f2.as_path()];
-        let prompt = compose_prompt(&clip, &frames);
+        let prompt = compose_prompt("RUBRIC-BODY-MARKER", &clip, &frames);
+        assert!(prompt.contains("RUBRIC-BODY-MARKER"));
         assert!(prompt.contains("@/tmp/frame_0.jpg"));
         assert!(prompt.contains("@/tmp/frame_1.jpg"));
         assert!(prompt.contains("IMG_2341.mp4"));
         assert!(prompt.contains("12.3"));
+        Ok(())
+    }
+
+    #[test]
+    fn compose_prompt_embeds_transcript_when_present() -> TestResult {
+        let mut clip = sample_clip()?;
+        clip.transcript = Some("check out this pond".to_string());
+        let frames: Vec<&Path> = vec![];
+        let prompt = compose_prompt("rubric", &clip, &frames);
+        assert!(prompt.contains("check out this pond"));
+        Ok(())
+    }
+
+    #[test]
+    fn compose_prompt_notes_missing_transcript() -> TestResult {
+        let clip = sample_clip()?;
+        let frames: Vec<&Path> = vec![];
+        let prompt = compose_prompt("rubric", &clip, &frames);
+        assert!(prompt.contains("no audio transcript available"));
         Ok(())
     }
 

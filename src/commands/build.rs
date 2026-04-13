@@ -40,7 +40,8 @@ pub(crate) async fn run(
         .context("frame extraction stage failed")?;
     println!("extracted frames for {} clips", clip_frames.len());
 
-    let analyzer = Arc::new(ClaudePrintAnalyzer);
+    let profile_body = crate::prompts::resolve("default").context("resolve prompt profile")?;
+    let analyzer = Arc::new(ClaudePrintAnalyzer::new(profile_body));
     let mut verdicts = analyze::run(analyzer, clip_frames, concurrency).await;
     println!("analyzed {} clips", verdicts.len());
 

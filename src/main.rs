@@ -9,6 +9,7 @@ mod paths;
 mod pipeline;
 mod preflight;
 mod process;
+mod prompts;
 mod sidecar;
 
 use anyhow::Result;
@@ -16,11 +17,13 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[allow(dead_code)]
-const _UNUSED_WHISPER_REFS: fn() = || {
+const _UNUSED_REFS: fn() = || {
     let _ = preflight::OPTIONAL_WHISPER;
     let _ = preflight::resolve_whisper_model;
     let _ = pipeline::transcribe::run;
     let _ = pipeline::transcribe::transcribe_one;
+    let _ = prompts::resolve;
+    let _ = prompts::NAMES;
 };
 
 #[derive(Parser)]
