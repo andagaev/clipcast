@@ -44,6 +44,9 @@ enum Command {
         /// Prompt profile: default | adventure | family.
         #[arg(long, default_value = "default")]
         prompt_profile: String,
+        /// Explicit path to a whisper `.bin` model (multilingual recommended).
+        #[arg(long)]
+        whisper_model: Option<PathBuf>,
     },
     /// Run discover + frame extraction + LLM scoring + filter, then write
     /// decisions.json. Stops before concat.
@@ -65,6 +68,9 @@ enum Command {
         /// Prompt profile: default | adventure | family.
         #[arg(long, default_value = "default")]
         prompt_profile: String,
+        /// Explicit path to a whisper `.bin` model (multilingual recommended).
+        #[arg(long)]
+        whisper_model: Option<PathBuf>,
     },
     /// Read an existing decisions.json sidecar and concat the kept clips
     /// (trusting the sidecar's `keep` values as authoritative).
@@ -99,6 +105,9 @@ enum Command {
         /// Prompt profile: default | adventure | family.
         #[arg(long, default_value = "default")]
         prompt_profile: String,
+        /// Explicit path to a whisper `.bin` model (multilingual recommended).
+        #[arg(long)]
+        whisper_model: Option<PathBuf>,
     },
 }
 
@@ -113,6 +122,7 @@ async fn main() -> Result<()> {
             concurrency,
             recursive,
             prompt_profile,
+            whisper_model,
         } => {
             let target = duration::parse(&duration)?;
             commands::build::run(
@@ -122,6 +132,7 @@ async fn main() -> Result<()> {
                 concurrency,
                 recursive,
                 &prompt_profile,
+                whisper_model.as_deref(),
             )
             .await
         }
@@ -132,6 +143,7 @@ async fn main() -> Result<()> {
             concurrency,
             recursive,
             prompt_profile,
+            whisper_model,
         } => {
             let target = duration::parse(&duration)?;
             commands::analyze::run(
@@ -141,6 +153,7 @@ async fn main() -> Result<()> {
                 concurrency,
                 recursive,
                 &prompt_profile,
+                whisper_model.as_deref(),
             )
             .await
         }
@@ -155,6 +168,16 @@ async fn main() -> Result<()> {
             clip,
             out,
             prompt_profile,
-        } => commands::add::run(&input_dir, &clip, out, &prompt_profile).await,
+            whisper_model,
+        } => {
+            commands::add::run(
+                &input_dir,
+                &clip,
+                out,
+                &prompt_profile,
+                whisper_model.as_deref(),
+            )
+            .await
+        }
     }
 }

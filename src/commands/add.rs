@@ -22,6 +22,7 @@ pub(crate) async fn run(
     clip_path: &Path,
     out: Option<PathBuf>,
     profile: &str,
+    whisper_model: Option<&Path>,
 ) -> Result<()> {
     preflight::check_binaries().context("preflight: missing binary")?;
 
@@ -37,7 +38,7 @@ pub(crate) async fn run(
         .with_context(|| format!("resolve {}", clip_path.display()))?;
 
     let profile_body = prompts::resolve(profile).context("resolve prompt profile")?;
-    let whisper_model = preflight::resolve_whisper_model();
+    let whisper_model = preflight::resolve_whisper_model(whisper_model);
 
     let output_path = out.unwrap_or_else(|| paths::default_output(input_dir, Utc::now()));
     let sidecar_path = paths::sidecar_for(&output_path);

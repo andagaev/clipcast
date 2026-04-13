@@ -109,15 +109,25 @@ fn is_video_clip(path: &Path) -> bool {
 /// Resolve the path to a whisper `.bin` model file, if one is available.
 ///
 /// Resolution order (first hit wins):
-/// 1. `$CLIPCAST_MODEL` (absolute path to a `.bin`)
-/// 2. `$CLIPCAST_MODELS_DIR/ggml-small.en.bin`
-/// 3. `~/.whisper-cpp-models/ggml-small.en.bin` (whisper.cpp convention)
+/// 1. `explicit` argument (from a `--whisper-model` CLI flag)
+/// 2. `$CLIPCAST_MODEL` (absolute path to a `.bin`)
+/// 3. `$CLIPCAST_MODELS_DIR/ggml-small.bin` (multilingual preferred)
+/// 4. `$CLIPCAST_MODELS_DIR/ggml-small.en.bin`
+/// 5. `~/.whisper-cpp-models/ggml-small.bin` (multilingual)
+/// 6. `~/.whisper-cpp-models/ggml-small.en.bin`
 ///
-/// Returns `None` if none of the locations contain a model — in that
-/// case, clipcast skips transcription rather than erroring out.
-pub(crate) fn resolve_whisper_model() -> Option<PathBuf> {
+/// Multilingual (`ggml-small.bin`) is preferred because it supports 99
+/// languages; the `.en` variant is English-only but slightly faster.
+/// Returns `None` if `whisper-cli` is missing or no model is found.
+pub(crate) fn resolve_whisper_model(explicit: Option<&Path>) -> Option<PathBuf> {
     if which::which(OPTIONAL_WHISPER).is_err() {
         return None;
+    }
+
+    if let Some(path) = explicit {
+        if path.is_file() {
+            return Some(path.to_path_buf());
+        }
     }
 
     if let Some(path) = std::env::var_os("CLIPCAST_MODEL").map(PathBuf::from) {
@@ -127,16 +137,20 @@ pub(crate) fn resolve_whisper_model() -> Option<PathBuf> {
     }
 
     if let Some(dir) = std::env::var_os("CLIPCAST_MODELS_DIR").map(PathBuf::from) {
-        let candidate = dir.join("ggml-small.en.bin");
-        if candidate.is_file() {
-            return Some(candidate);
+        for name in ["ggml-small.bin", "ggml-small.en.bin"] {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
 
     if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-        let candidate = home.join(".whisper-cpp-models").join("ggml-small.en.bin");
-        if candidate.is_file() {
-            return Some(candidate);
+        for name in ["ggml-small.bin", "ggml-small.en.bin"] {
+            let candidate = home.join(".whisper-cpp-models").join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
 

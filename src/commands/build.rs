@@ -14,6 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Run the full build pipeline.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run(
     input_dir: &Path,
     target_duration: Duration,
@@ -21,12 +22,13 @@ pub(crate) async fn run(
     concurrency: usize,
     recursive: bool,
     profile: &str,
+    whisper_model: Option<&Path>,
 ) -> Result<()> {
     preflight::check_binaries().context("preflight: missing binary")?;
     preflight::check_input_dir(input_dir, recursive).context("preflight: input dir")?;
 
     let profile_body = prompts::resolve(profile).context("resolve prompt profile")?;
-    let whisper_model = preflight::resolve_whisper_model();
+    let whisper_model = preflight::resolve_whisper_model(whisper_model);
     if whisper_model.is_none() {
         println!("note: whisper-cli or model not found — transcription skipped");
     }
