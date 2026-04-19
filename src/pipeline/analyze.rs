@@ -75,7 +75,6 @@ async fn analyze_with_retries<A: ClipAnalyzer>(analyzer: &A, cf: &ClipFrames) ->
         score: None,
         reason: None,
         error: Some(error_msg),
-        keep: false,
         transcript: cf.clip.transcript.clone(),
     }
 }
@@ -127,7 +126,6 @@ mod tests {
                 score: Some(8),
                 reason: Some("always 8".to_string()),
                 error: None,
-                keep: false,
                 transcript: None,
             })
         }
@@ -155,7 +153,6 @@ mod tests {
                     score: Some(5),
                     reason: Some("eventually".to_string()),
                     error: None,
-                    keep: false,
                     transcript: None,
                 })
             }

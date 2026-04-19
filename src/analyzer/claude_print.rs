@@ -120,7 +120,6 @@ fn parse_verdict(clip: &Clip, stdout: &[u8], stderr: &[u8]) -> Result<ClipVerdic
         score: Some(wire.score.clamp(1, 10)),
         reason: Some(wire.reason),
         error: None,
-        keep: false,
         transcript: clip.transcript.clone(),
     })
 }
@@ -194,7 +193,6 @@ mod tests {
         assert_eq!(v.score, Some(8));
         assert_eq!(v.reason.as_deref(), Some("clear subject"));
         assert_eq!(v.error, None);
-        assert!(!v.keep);
         Ok(())
     }
 

@@ -1,9 +1,10 @@
 //! `clipcast add <input-dir> <clip-path>` — analyze one new clip and
-//! append it to the existing sidecar with `keep = true`.
+//! append it to the existing sidecar.
 //!
 //! Reads the sidecar, runs ffprobe + whisper (if available) + frame
 //! extraction + LLM scoring on the new clip, then writes the sidecar
 //! back with the new verdict appended. Does not re-score existing clips.
+//! Run `clipcast plan --revise ...` afterwards to incorporate into the cut.
 
 use crate::analyzer::claude_print::ClaudePrintAnalyzer;
 use crate::analyzer::ClipAnalyzer;
@@ -85,11 +86,10 @@ pub(crate) async fn run(
 
     let analyzer = ClaudePrintAnalyzer::new(profile_body);
     let frame_refs: Vec<&Path> = cf.frame_paths.iter().map(PathBuf::as_path).collect();
-    let mut verdict = analyzer
+    let verdict = analyzer
         .analyze(&cf.clip, &frame_refs)
         .await
         .context("LLM analysis failed")?;
-    verdict.keep = true;
     println!(
         "scored {}: {}",
         verdict

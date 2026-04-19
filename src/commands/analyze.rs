@@ -1,9 +1,9 @@
-//! `clipcast analyze <input-dir>` — discover + frames + LLM + filter + sidecar.
-//! Stops before concat.
+//! `clipcast analyze <input-dir>` — discover + frames + LLM scoring + sidecar.
+//! Stops before the plan stage; next-step is `clipcast plan`.
 
 use crate::analyzer::claude_print::ClaudePrintAnalyzer;
 use crate::paths;
-use crate::pipeline::{analyze, discover, filter, frames, transcribe};
+use crate::pipeline::{analyze, discover, frames, transcribe};
 use crate::preflight;
 use crate::prompts;
 use crate::sidecar;
@@ -49,9 +49,7 @@ pub(crate) async fn run(
         .context("frame extraction stage failed")?;
 
     let analyzer = Arc::new(ClaudePrintAnalyzer::new(profile_body));
-    let mut verdicts = analyze::run(analyzer, clip_frames, concurrency).await;
-
-    filter::apply(&mut verdicts, target_duration).context("filter stage failed")?;
+    let verdicts = analyze::run(analyzer, clip_frames, concurrency).await;
 
     let sidecar_path = paths::sidecar_for(&output_path);
     let sidecar_payload = sidecar::build(target_duration.as_secs(), verdicts);
@@ -59,6 +57,11 @@ pub(crate) async fn run(
         .await
         .context("sidecar write failed")?;
     println!("wrote {}", sidecar_path.display());
+    println!(
+        "next: clipcast plan {} --brief '...' --duration {}s",
+        input_dir.display(),
+        target_duration.as_secs()
+    );
 
     Ok(())
 }

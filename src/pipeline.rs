@@ -5,6 +5,6 @@
 pub(crate) mod analyze;
 pub(crate) mod concat;
 pub(crate) mod discover;
-pub(crate) mod filter;
 pub(crate) mod frames;
+pub(crate) mod plan;
 pub(crate) mod transcribe;

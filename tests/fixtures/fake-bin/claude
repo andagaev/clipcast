@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Fake claude -p for integration tests.
-# Reads prompt from stdin (discards), writes canned JSON verdict to stdout.
+# Reads prompt from stdin, inspects it to decide whether this is a
+# per-clip scoring prompt or a plan-stage prompt, and emits the
+# appropriate fixed JSON on stdout.
+#
 # Asserts AGENT_COLLECTOR_IGNORE=1 is set in the env — this is the
 # load-bearing check that proves the hook isolation propagates.
 
@@ -9,5 +12,25 @@ if [ "${AGENT_COLLECTOR_IGNORE:-}" != "1" ]; then
     exit 1
 fi
 
-cat >/dev/null
-printf '{"score": 7, "reason": "fake verdict from mock claude"}\n'
+prompt="$(cat)"
+
+if [[ "$prompt" == *"Vlog Cut Planner"* ]]; then
+    # Plan stage: emit an empty plan (no segments, no rejections) so
+    # render produces a reasonable-shaped output. Integration tests that
+    # want a non-empty cut will inject their own fake clips + prompt.
+    # Extract clip paths from the prompt's "Clips" section so we pass
+    # schema validation downstream.
+    sources=$(printf '%s\n' "$prompt" | sed -n 's/^- path: //p' | head -n 50)
+    segments=""
+    i=1
+    while IFS= read -r src; do
+        [ -z "$src" ] && continue
+        if [ -n "$segments" ]; then segments="${segments},"; fi
+        segments="${segments}{\"order\":${i},\"source\":\"${src}\",\"start_s\":null,\"end_s\":null,\"duration_s\":1.0,\"title\":\"t\",\"rationale\":\"r\"}"
+        i=$((i + 1))
+    done <<< "$sources"
+    printf '{"estimated_duration_s":0.0,"segments":[%s],"rejected":[],"warnings":[]}\n' "$segments"
+else
+    # Per-clip analyzer prompt: emit a fixed score + reason.
+    printf '{"score": 7, "reason": "fake verdict from mock claude"}\n'
+fi

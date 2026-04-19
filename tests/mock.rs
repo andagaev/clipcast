@@ -136,7 +136,7 @@ fn analyze_writes_sidecar_without_concat() -> TestResult {
 }
 
 #[test]
-fn render_uses_sidecar_from_analyze() -> TestResult {
+fn analyze_then_plan_then_render() -> TestResult {
     let (_tmp, input_dir) = setup()?;
 
     let a = Command::new(binary())
@@ -148,6 +148,27 @@ fn render_uses_sidecar_from_analyze() -> TestResult {
         .output()?;
     if !a.status.success() {
         return Err(format!("analyze failed: {}", String::from_utf8_lossy(&a.stderr)).into());
+    }
+
+    let p = Command::new(binary())
+        .env("PATH", path_with_fakes())
+        .arg("plan")
+        .arg(&input_dir)
+        .arg("--duration")
+        .arg("60s")
+        .arg("--brief")
+        .arg("test brief")
+        .output()?;
+    if !p.status.success() {
+        return Err(format!("plan failed: {}", String::from_utf8_lossy(&p.stderr)).into());
+    }
+
+    let entries: Vec<_> = std::fs::read_dir(&input_dir)?
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    if !entries.iter().any(|n| n.contains(".plan.json")) {
+        return Err(format!("no plan.json in {entries:?}").into());
     }
 
     let r = Command::new(binary())

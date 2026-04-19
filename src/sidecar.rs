@@ -5,9 +5,18 @@ use crate::clip::ClipVerdict;
 use chrono::{DateTime, Utc};
 use std::path::{Path, PathBuf};
 
+/// The current `decisions.json` schema version that this build reads and writes.
+pub(crate) const DECISIONS_SCHEMA_VERSION: u32 = 2;
+
+fn default_schema_version() -> u32 {
+    DECISIONS_SCHEMA_VERSION
+}
+
 /// The top-level structure of a `decisions.json` file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Sidecar {
+    #[serde(default = "default_schema_version")]
+    pub(crate) schema_version: u32,
     pub(crate) clipcast_version: String,
     pub(crate) generated_at: DateTime<Utc>,
     pub(crate) target_duration_s: u64,
@@ -40,9 +49,15 @@ pub(crate) enum SidecarError {
 
     #[error("failed to serialize sidecar: {0}")]
     Serialize(#[source] serde_json::Error),
+
+    #[error(
+        "unsupported decisions schema_version {found}; this build expects {expected}. \
+         Run `clipcast schema decisions` for the current shape."
+    )]
+    UnsupportedVersion { found: u32, expected: u32 },
 }
 
-/// Read a sidecar file from disk.
+/// Read a sidecar file from disk, enforcing the current schema version.
 pub(crate) async fn read(path: &Path) -> Result<Sidecar, SidecarError> {
     let text = tokio::fs::read_to_string(path)
         .await
@@ -50,10 +65,17 @@ pub(crate) async fn read(path: &Path) -> Result<Sidecar, SidecarError> {
             path: path.to_path_buf(),
             source,
         })?;
-    serde_json::from_str(&text).map_err(|source| SidecarError::Parse {
+    let sidecar: Sidecar = serde_json::from_str(&text).map_err(|source| SidecarError::Parse {
         path: path.to_path_buf(),
         source,
-    })
+    })?;
+    if sidecar.schema_version != DECISIONS_SCHEMA_VERSION {
+        return Err(SidecarError::UnsupportedVersion {
+            found: sidecar.schema_version,
+            expected: DECISIONS_SCHEMA_VERSION,
+        });
+    }
+    Ok(sidecar)
 }
 
 /// Write a sidecar file to disk (pretty-printed).
@@ -70,6 +92,7 @@ pub(crate) async fn write(path: &Path, sidecar: &Sidecar) -> Result<(), SidecarE
 /// Build a fresh sidecar for a newly-run analyze pass.
 pub(crate) fn build(target_duration_s: u64, clips: Vec<ClipVerdict>) -> Sidecar {
     Sidecar {
+        schema_version: DECISIONS_SCHEMA_VERSION,
         clipcast_version: env!("CARGO_PKG_VERSION").to_string(),
         generated_at: Utc::now(),
         target_duration_s,
@@ -104,7 +127,6 @@ mod tests {
                 score: Some(8),
                 reason: Some("good".to_string()),
                 error: None,
-                keep: true,
                 transcript: None,
             },
             ClipVerdict {
@@ -115,7 +137,6 @@ mod tests {
                 score: Some(3),
                 reason: Some("boring".to_string()),
                 error: None,
-                keep: false,
                 transcript: None,
             },
         ])
@@ -129,9 +150,29 @@ mod tests {
         write(&path, &original).await?;
         let read_back = read(&path).await?;
         assert_eq!(read_back.target_duration_s, original.target_duration_s);
+        assert_eq!(read_back.schema_version, DECISIONS_SCHEMA_VERSION);
         assert_eq!(read_back.clips.len(), 2);
-        assert!(read_back.clips[0].keep);
-        assert!(!read_back.clips[1].keep);
+        assert_eq!(read_back.clips[0].score, Some(8));
+        assert_eq!(read_back.clips[1].score, Some(3));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn read_rejects_wrong_schema_version() -> TestResult {
+        let dir = TempDir::new()?;
+        let path = dir.path().join("old.decisions.json");
+        let bogus = serde_json::json!({
+            "schema_version": 1,
+            "clipcast_version": "0.0.0",
+            "generated_at": "2026-04-12T14:00:00Z",
+            "target_duration_s": 60,
+            "clips": [],
+        });
+        tokio::fs::write(&path, serde_json::to_string(&bogus)?).await?;
+        let err = read(&path).await.err().ok_or("expected error")?;
+        if !matches!(err, SidecarError::UnsupportedVersion { .. }) {
+            return Err(format!("wrong variant: {err:?}").into());
+        }
         Ok(())
     }
 

@@ -20,13 +20,24 @@ pub(crate) fn default_output(input_dir: &Path, now: DateTime<Utc>) -> PathBuf {
 ///
 /// `/foo/bar/vlog-2026-04-12.mp4` → `/foo/bar/vlog-2026-04-12.decisions.json`
 pub(crate) fn sidecar_for(output: &Path) -> PathBuf {
+    stem_sibling(output, ".decisions.json")
+}
+
+/// Return the plan.json path for a given output path.
+///
+/// `/foo/bar/vlog-2026-04-12.mp4` → `/foo/bar/vlog-2026-04-12.plan.json`
+pub(crate) fn plan_for(output: &Path) -> PathBuf {
+    stem_sibling(output, ".plan.json")
+}
+
+fn stem_sibling(output: &Path, suffix: &str) -> PathBuf {
     let stem = output
         .file_stem()
         .unwrap_or_else(|| std::ffi::OsStr::new("vlog"))
         .to_os_string();
     let parent = output.parent().unwrap_or_else(|| Path::new("."));
     let mut name = stem;
-    name.push(".decisions.json");
+    name.push(suffix);
     parent.join(name)
 }
 
@@ -69,5 +80,11 @@ mod tests {
     fn sidecar_for_no_extension() {
         let side = sidecar_for(Path::new("vlog"));
         assert_eq!(side, PathBuf::from("vlog.decisions.json"));
+    }
+
+    #[test]
+    fn plan_for_simple_mp4() {
+        let p = plan_for(Path::new("/foo/bar/vlog-2026-04-12.mp4"));
+        assert_eq!(p, PathBuf::from("/foo/bar/vlog-2026-04-12.plan.json"));
     }
 }

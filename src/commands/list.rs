@@ -1,7 +1,7 @@
 //! `clipcast list <input-dir>` — print the current sidecar state.
 //!
 //! Two output modes:
-//! - Default: human-readable, 1-indexed positions, `[X]`/`[ ]` keep markers
+//! - Default: human-readable, 1-indexed positions, scores + reasons
 //! - `--json`: machine-readable projection of the sidecar with positions
 //!   injected, suitable for an agent to parse
 
@@ -28,24 +28,21 @@ pub(crate) async fn run(input_dir: &Path, out: Option<PathBuf>, json: bool) -> R
 }
 
 fn print_human(sidecar_path: &Path, side: &sidecar::Sidecar) {
-    let kept_count = side.clips.iter().filter(|c| c.keep).count();
-    let kept_duration: f64 = side
+    let total_count = side.clips.len();
+    let scored = side
         .clips
         .iter()
-        .filter(|c| c.keep)
-        .map(|c| c.duration_s)
-        .sum();
-    let total_count = side.clips.len();
+        .filter(|c| c.score.is_some() && c.error.is_none())
+        .count();
 
     println!("Sidecar: {}", sidecar_path.display());
     println!(
-        "Target: {}s  Kept: {kept_duration:.1}s ({kept_count} of {total_count} clips)",
+        "Target: {}s  Scored: {scored} of {total_count} clips",
         side.target_duration_s
     );
     println!();
 
     for (i, c) in side.clips.iter().enumerate() {
-        let mark = if c.keep { "[X]" } else { "[ ]" };
         let name = c.path.file_name().map_or_else(
             || c.path.display().to_string(),
             |n| n.to_string_lossy().into_owned(),
@@ -53,7 +50,7 @@ fn print_human(sidecar_path: &Path, side: &sidecar::Sidecar) {
         let score = c.score.map_or_else(|| "-".to_string(), |s| s.to_string());
         let reason = c.reason.as_deref().unwrap_or("");
         println!(
-            "{pos:>3}. {mark} {name:<40} ({dur:5.1}s)  score={score}  {reason}",
+            "{pos:>3}. {name:<40} ({dur:5.1}s)  score={score}  {reason}",
             pos = i + 1,
             dur = c.duration_s,
         );
@@ -61,13 +58,11 @@ fn print_human(sidecar_path: &Path, side: &sidecar::Sidecar) {
 }
 
 fn print_json(sidecar_path: &Path, side: &sidecar::Sidecar) -> Result<()> {
-    let kept_duration: f64 = side
+    let scored = side
         .clips
         .iter()
-        .filter(|c| c.keep)
-        .map(|c| c.duration_s)
-        .sum();
-    let kept_count = side.clips.iter().filter(|c| c.keep).count();
+        .filter(|c| c.score.is_some() && c.error.is_none())
+        .count();
 
     let clips: Vec<serde_json::Value> = side
         .clips
@@ -76,7 +71,6 @@ fn print_json(sidecar_path: &Path, side: &sidecar::Sidecar) -> Result<()> {
         .map(|(i, c)| {
             serde_json::json!({
                 "position": i + 1,
-                "keep": c.keep,
                 "path": c.path,
                 "duration_s": c.duration_s,
                 "score": c.score,
@@ -91,12 +85,12 @@ fn print_json(sidecar_path: &Path, side: &sidecar::Sidecar) -> Result<()> {
 
     let out = serde_json::json!({
         "sidecar_path": sidecar_path,
+        "schema_version": side.schema_version,
         "clipcast_version": side.clipcast_version,
         "generated_at": side.generated_at,
         "target_duration_s": side.target_duration_s,
-        "kept_duration_s": kept_duration,
         "total_clips": side.clips.len(),
-        "kept_clips": kept_count,
+        "scored_clips": scored,
         "clips": clips,
     });
 

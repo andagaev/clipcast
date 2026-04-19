@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "clipcast decisions.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "clipcast_version",
+    "generated_at",
+    "target_duration_s",
+    "clips"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 2 },
+    "clipcast_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "target_duration_s": { "type": "integer", "minimum": 1 },
+    "clips": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "duration_s",
+          "timestamp",
+          "timestamp_source",
+          "score",
+          "reason",
+          "error"
+        ],
+        "properties": {
+          "path": { "type": "string" },
+          "duration_s": { "type": "number" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "timestamp_source": {
+            "type": "string",
+            "enum": ["creation_time", "filename_pattern", "file_mtime"]
+          },
+          "score": { "type": ["integer", "null"], "minimum": 1, "maximum": 10 },
+          "reason": { "type": ["string", "null"] },
+          "error": { "type": ["string", "null"] },
+          "transcript": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

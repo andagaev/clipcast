@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "clipcast plan.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "clipcast_version",
+    "generated_at",
+    "model",
+    "decisions_ref",
+    "brief",
+    "target_duration_s",
+    "estimated_duration_s",
+    "segments"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "clipcast_version": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "model": { "type": "string" },
+    "decisions_ref": {
+      "type": "object",
+      "required": ["path", "generated_at"],
+      "properties": {
+        "path": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "brief": { "type": "string" },
+    "target_duration_s": { "type": "integer", "minimum": 1 },
+    "estimated_duration_s": { "type": "number" },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "order",
+          "source",
+          "start_s",
+          "end_s",
+          "duration_s",
+          "title",
+          "rationale"
+        ],
+        "properties": {
+          "order": { "type": "integer", "minimum": 1 },
+          "source": { "type": "string" },
+          "start_s": { "type": ["number", "null"] },
+          "end_s": { "type": ["number", "null"] },
+          "duration_s": { "type": "number" },
+          "title": { "type": "string" },
+          "rationale": { "type": "string" },
+          "trim_reason": { "type": "string" }
+        }
+      }
+    },
+    "rejected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "score", "rejected_reason"],
+        "properties": {
+          "source": { "type": "string" },
+          "score": { "type": "integer", "minimum": 0, "maximum": 10 },
+          "rejected_reason": { "type": "string" }
+        }
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  }
+}

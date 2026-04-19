@@ -54,11 +54,6 @@ pub(crate) struct ClipVerdict {
     /// Error message if analysis failed for this clip.
     pub(crate) error: Option<String>,
 
-    /// Whether to include this clip in the final vlog. Set during the
-    /// filter stage (`build` / `analyze`), honored as-is by `render`.
-    #[serde(default)]
-    pub(crate) keep: bool,
-
     /// Transcript that was fed to the LLM during analysis, if any.
     /// Stored in the sidecar for user visibility and debugging.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -85,7 +80,6 @@ mod tests {
             score: Some(8),
             reason: Some("clear subject".to_string()),
             error: None,
-            keep: true,
             transcript: None,
         })
     }
@@ -109,24 +103,7 @@ mod tests {
         assert_eq!(parsed.path, v.path);
         assert_eq!(parsed.score, v.score);
         assert_eq!(parsed.reason, v.reason);
-        assert_eq!(parsed.keep, v.keep);
         assert_eq!(parsed.timestamp_source, v.timestamp_source);
-        Ok(())
-    }
-
-    #[test]
-    fn verdict_default_keep_is_false() -> TestResult {
-        let json = r#"{
-            "path": "clip.mp4",
-            "duration_s": 5.0,
-            "timestamp": "2026-04-12T14:23:45Z",
-            "timestamp_source": "creation_time",
-            "score": 7,
-            "reason": "ok",
-            "error": null
-        }"#;
-        let v: ClipVerdict = serde_json::from_str(json)?;
-        assert!(!v.keep);
         Ok(())
     }
 
@@ -144,7 +121,6 @@ mod tests {
             score: None,
             reason: None,
             error: Some("timed out".to_string()),
-            keep: false,
             transcript: None,
         };
         let json = serde_json::to_string(&v)?;

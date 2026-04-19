@@ -1,8 +1,10 @@
-//! `clipcast build <input-dir>` — full pipeline one-shot.
+//! `clipcast build <input-dir>` — full pipeline one-shot:
+//! discover → transcribe → frames → analyze → plan (LLM) → render.
 
 use crate::analyzer::claude_print::ClaudePrintAnalyzer;
 use crate::paths;
-use crate::pipeline::{analyze, concat, discover, filter, frames, transcribe};
+use crate::pipeline::{analyze, concat, discover, frames, plan as pipeline_plan, transcribe};
+use crate::plan as plan_types;
 use crate::preflight;
 use crate::prompts;
 use crate::sidecar;
@@ -12,6 +14,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+
+const MODEL_LABEL: &str = "claude-opus-4-7";
 
 /// Run the full build pipeline.
 #[allow(clippy::too_many_arguments)]
@@ -23,6 +27,8 @@ pub(crate) async fn run(
     recursive: bool,
     profile: &str,
     whisper_model: Option<&Path>,
+    brief: Option<String>,
+    brief_file: Option<PathBuf>,
 ) -> Result<()> {
     preflight::check_binaries().context("preflight: missing binary")?;
     preflight::check_input_dir(input_dir, recursive).context("preflight: input dir")?;
@@ -32,6 +38,8 @@ pub(crate) async fn run(
     if whisper_model.is_none() {
         println!("note: whisper-cli or model not found — transcription skipped");
     }
+
+    let brief_text = resolve_brief(brief, brief_file).await?;
 
     let output_path = out.unwrap_or_else(|| paths::default_output(input_dir, Utc::now()));
     let output_abs = output_path
@@ -63,27 +71,50 @@ pub(crate) async fn run(
     println!("extracted frames for {} clips", clip_frames.len());
 
     let analyzer = Arc::new(ClaudePrintAnalyzer::new(profile_body));
-    let mut verdicts = analyze::run(analyzer, clip_frames, concurrency).await;
+    let verdicts = analyze::run(analyzer, clip_frames, concurrency).await;
     println!("analyzed {} clips (profile: {profile})", verdicts.len());
 
-    filter::apply(&mut verdicts, target_duration).context("filter stage failed")?;
-    let kept_count = verdicts.iter().filter(|v| v.keep).count();
-    println!(
-        "filter kept {kept_count} clips within {}s budget",
-        target_duration.as_secs()
-    );
-
     let sidecar_path = paths::sidecar_for(&output_path);
-    let sidecar_payload = sidecar::build(target_duration.as_secs(), verdicts.clone());
+    let sidecar_payload = sidecar::build(target_duration.as_secs(), verdicts);
     sidecar::write(&sidecar_path, &sidecar_payload)
         .await
         .context("sidecar write failed")?;
     println!("wrote {}", sidecar_path.display());
 
-    concat::run(&verdicts, &metas_by_path, &output_path)
+    let plan = pipeline_plan::run(
+        brief_text,
+        target_duration.as_secs(),
+        &sidecar_payload,
+        &sidecar_path,
+        MODEL_LABEL,
+    )
+    .await
+    .context("plan stage failed")?;
+    let plan_path = paths::plan_for(&output_path);
+    plan_types::save(&plan_path, &plan)
+        .await
+        .context("plan write failed")?;
+    println!(
+        "wrote {} ({} segments, {} rejected)",
+        plan_path.display(),
+        plan.segments.len(),
+        plan.rejected.len()
+    );
+
+    concat::run_segments(&plan.segments, &metas_by_path, &output_path)
         .await
         .context("concat stage failed")?;
     println!("wrote {}", output_path.display());
 
     Ok(())
+}
+
+async fn resolve_brief(brief: Option<String>, brief_file: Option<PathBuf>) -> Result<String> {
+    match (brief, brief_file) {
+        (Some(b), _) => Ok(b),
+        (None, Some(p)) => tokio::fs::read_to_string(&p)
+            .await
+            .with_context(|| format!("read brief file {}", p.display())),
+        (None, None) => Ok(pipeline_plan::DEFAULT_BRIEF.to_string()),
+    }
 }
