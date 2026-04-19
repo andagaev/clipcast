@@ -2,7 +2,9 @@
 
 Turn a directory of short video clips (from Meta Ray-Ban glasses or any camera) into one combined vlog video. A multimodal LLM scores every clip, then an LLM planner assembles a reviewable cut plan, and `ffmpeg` renders the final video.
 
-## Install
+Designed to be driven by a coding agent — every command exposes `--json` structured output with `next_action` hints, so an agent can run the whole pipeline unattended.
+
+## 1. Install
 
 Prerequisites:
 
@@ -19,89 +21,83 @@ cd clipcast
 cargo install --path .
 ```
 
-## Usage
-
-### One-shot
+Verify:
 
 ```bash
-# Full pipeline: discover → frames → score → plan (LLM) → render
-clipcast build ~/Desktop/meta-clips/ --brief "Saturday trail run with friends"
-
-# Shorter vlog (default is 3 minutes)
-clipcast build ~/Desktop/meta-clips/ --duration 90s --brief "..."
-
-# Brief from a file (markdown welcome)
-clipcast build ~/Desktop/meta-clips/ --brief-file brief.md
-
-# Custom output path
-clipcast build ~/Desktop/meta-clips/ --out ~/Movies/sat-run.mp4 --brief "..."
+clipcast --help
+clipcast schema plan   # sanity-check that the binary runs
 ```
 
-### Review-and-render workflow
+## 2. Run an agent against your clips
 
-For tighter control, run the stages by hand and hand-edit `plan.json` before rendering.
+Open Claude Code (or any shell-capable agent) in the directory containing your clips and give it a prompt like:
+
+> Drive the clipcast pipeline for the clips in `~/Desktop/meta-clips/`.
+> Goal: a 90-second highlight reel. Tone: relaxed, chronological, drop blurry or redundant clips.
+>
+> Loop:
+> 1. Run `clipcast status <dir> --json` and parse it.
+> 2. If `stage == "rendered"`, report the `output_path` and stop.
+> 3. Otherwise, run the command in `next_action`. For the `plan` step, pass `--brief "<your inferred brief>"` and `--duration 90s`.
+> 4. Go back to step 1.
+>
+> If a command returns `{"error": {"code": ..., "fix": ...}}`, follow the `fix` field.
+> To tweak the cut after an initial render, run `clipcast plan <dir> --revise --instructions "..." --json` and then `clipcast render <dir>` again.
+
+Substitute your own clips directory and brief. The agent will:
+
+1. `clipcast analyze <dir>` — score every clip with the LLM. Produces `decisions.json`.
+2. `clipcast plan <dir> --brief "..." --duration 90s` — LLM assembles a cut plan. Produces `plan.json`.
+3. `clipcast render <dir>` — ffmpeg trims + concats. Produces `vlog-YYYY-MM-DD.mp4`.
+
+All artifacts land in the input directory. You review/edit `plan.json` or ask the agent to `--revise` it.
+
+## 3. Manual usage (optional)
+
+If you'd rather run it yourself without an agent:
 
 ```bash
-# 1. Score every clip in the directory. Writes decisions.json.
+# One-shot
+clipcast build ~/Desktop/meta-clips/ \
+  --duration 90s \
+  --brief "Saturday trail run with friends"
+
+# Step-by-step, editing plan.json between plan and render
 clipcast analyze ~/Desktop/meta-clips/
+clipcast plan    ~/Desktop/meta-clips/ --brief "..." --duration 90s
+${EDITOR:-vi}    ~/Desktop/meta-clips/vlog-*.plan.json
+clipcast render  ~/Desktop/meta-clips/
 
-# 2. Generate a cut plan from the scores + your brief.
-clipcast plan ~/Desktop/meta-clips/ \
-  --brief "Saturday trail run with friends" \
-  --duration 90s
-
-# 3. Review and edit the plan (reorder, drop, or trim segments).
-${EDITOR:-vi} ~/Desktop/meta-clips/vlog-*.plan.json
-
-# 4. Render the final vlog from the edited plan.
-clipcast render ~/Desktop/meta-clips/
-```
-
-Ask the planner to revise its plan instead of editing by hand:
-
-```bash
+# Ask the planner to revise instead of hand-editing
 clipcast plan ~/Desktop/meta-clips/ --revise \
-  --instructions "cut the last two rain segments, open with the waterfall clip"
-```
-
-### Inspect state
-
-```bash
-# Where are we in the pipeline? What's the next command?
-clipcast status ~/Desktop/meta-clips/ --json
-
-# Show every scored clip
-clipcast list ~/Desktop/meta-clips/
-
-# Print the JSON schema for decisions.json or plan.json
-clipcast schema plan
-clipcast schema decisions
+  --instructions "cut the last two rain segments; open with the waterfall"
+clipcast render ~/Desktop/meta-clips/
 ```
 
 ### Commands
 
-- `build` — full pipeline in one shot (`analyze` → `plan` → `render`)
-- `analyze` — score clips with the LLM; writes `decisions.json`
-- `plan` — assemble a cut plan from scored clips; writes `plan.json`. Use `--revise --instructions "..."` to iterate.
-- `render` — read `plan.json`, trim segments, concat into the final mp4. `--dry-run` prints the ffmpeg commands without executing.
-- `status` — read-only project state with a `next_action` hint (great for agents and scripts).
+- `build` — full pipeline one-shot (`analyze` → `plan` → `render`)
+- `analyze` — LLM scores every clip; writes `decisions.json`
+- `plan` — LLM assembles a cut plan; writes `plan.json`. Use `--revise --instructions "..."` to iterate.
+- `render` — trim + concat planned segments. `--dry-run` prints ffmpeg commands without executing.
+- `status` — read-only project state with a `next_action` hint (the agent loop's anchor).
 - `schema` — print the JSON schema for `plan` or `decisions` sidecars.
 - `list` — show every scored clip from `decisions.json`.
-- `add` — score one new clip and append it to the sidecar; run `plan --revise` afterwards to pull it into the cut.
+- `add` — score one new clip and append to the sidecar; follow up with `plan --revise`.
 
 ### Flags
 
-- `--json` (on `plan`, `status`) — emit a structured stdout envelope with `next_action` hints. Stdout is always JSON when piped, even without the flag.
-- `--brief` / `--brief-file` (on `build`, `plan`) — freeform description of the vlog you want. Steers the planner's picks and pacing.
-- `--dry-run` (on `plan`, `render`) — print what would happen (prompt preview / ffmpeg invocations) without calling the LLM or writing the mp4.
-- `--duration <3m | 90s | 300>` — target length. Fed to the planner as a soft budget.
+- `--json` (on `plan`, `status`) — force structured stdout envelope. Enabled automatically when stdout is piped.
+- `--brief` / `--brief-file` (on `build`, `plan`) — freeform description that steers the planner.
+- `--dry-run` (on `plan`, `render`) — preview without calling the LLM or writing the mp4.
+- `--duration <3m | 90s | 300>` — target length; soft budget for the planner.
 
 ### Output
 
 All artifacts live in the input directory:
 
 - `vlog-YYYY-MM-DD.decisions.json` — LLM scores + reasons for every clip (schema v2)
-- `vlog-YYYY-MM-DD.plan.json` — the cut plan: segments, order, trims, rationale, rejected clips, warnings (schema v1). Hand-editable.
+- `vlog-YYYY-MM-DD.plan.json` — cut plan: segments, order, trims, rationale, rejected clips, warnings (schema v1). Hand-editable.
 - `vlog-YYYY-MM-DD.mp4` — the concatenated vlog (override with `--out`)
 
 ### Scope
