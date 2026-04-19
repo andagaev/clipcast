@@ -40,18 +40,6 @@ pub(crate) enum ConcatError {
     )]
     ClipNotPortrait { path: PathBuf, w: u32, h: u32 },
 
-    #[error(
-        "aspect-ratio mismatch: first segment {} is {first_dims:?}, \
-         but segment {} is {offender_dims:?}. Drop one from the plan or re-encode.",
-        first.display(), offender.display()
-    )]
-    AspectMismatch {
-        first: PathBuf,
-        first_dims: (u32, u32),
-        offender: PathBuf,
-        offender_dims: (u32, u32),
-    },
-
     #[error("no segments to concat")]
     NoSegments,
 
@@ -91,19 +79,9 @@ pub(crate) async fn run_segments(
     let mut ordered: Vec<&Segment> = segments.iter().collect();
     ordered.sort_by_key(|s| s.order);
 
-    // Portrait + aspect-ratio check on each segment's source.
-    let (w0, h0) = metas_by_path
-        .get(&ordered[0].source)
-        .copied()
-        .ok_or_else(|| ConcatError::MissingMeta(ordered[0].source.clone()))?;
-    if !is_portrait(w0, h0) {
-        return Err(ConcatError::ClipNotPortrait {
-            path: ordered[0].source.clone(),
-            w: w0,
-            h: h0,
-        });
-    }
-    for s in ordered.iter().skip(1) {
+    // Portrait-only check per segment. Mixed portrait resolutions are fine:
+    // the ffmpeg filter graph below scale-pads every input to TARGET_W x TARGET_H.
+    for s in &ordered {
         let (w, h) = metas_by_path
             .get(&s.source)
             .copied()
@@ -113,14 +91,6 @@ pub(crate) async fn run_segments(
                 path: s.source.clone(),
                 w,
                 h,
-            });
-        }
-        if (w, h) != (w0, h0) {
-            return Err(ConcatError::AspectMismatch {
-                first: ordered[0].source.clone(),
-                first_dims: (w0, h0),
-                offender: s.source.clone(),
-                offender_dims: (w, h),
             });
         }
     }
@@ -359,15 +329,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_segments_detects_aspect_mismatch() -> TestResult {
+    async fn run_segments_accepts_mixed_portrait_resolutions() -> TestResult {
+        // Mixed portrait sizes are tolerated; the filter graph scale-pads
+        // each input to the common target. This test only validates the
+        // preflight checks pass — we don't actually shell out to ffmpeg
+        // here (its real invocation is covered by the mock integration
+        // tests).
         let segments = vec![seg("a.mp4", 1, None, None), seg("b.mp4", 2, None, None)];
         let mut metas = HashMap::new();
         metas.insert(PathBuf::from("a.mp4"), (1080u32, 1920u32));
         metas.insert(PathBuf::from("b.mp4"), (720u32, 1280u32));
         let dir = tempfile::TempDir::new()?;
         let result = run_segments(&segments, &metas, &dir.path().join("out.mp4")).await;
-        if !matches!(result, Err(ConcatError::AspectMismatch { .. })) {
-            return Err(format!("wrong result: {result:?}").into());
+        // This will fail trying to invoke real ffmpeg on fake paths, but
+        // NOT with a preflight error — that's the load-bearing assertion.
+        if matches!(result, Err(ConcatError::ClipNotPortrait { .. })) {
+            return Err("mixed portrait sizes should not trigger portrait check".into());
         }
         Ok(())
     }
